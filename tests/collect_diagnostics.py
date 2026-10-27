@@ -11,10 +11,15 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def recent_files(root):
+def recent_files(root, *, all_sessions=False):
     logs = root / 'logs'
     sessions = sorted((p for p in (logs / 'services').glob('*') if p.is_dir()), key=lambda p: p.name)
     session = sessions[-1] if sessions else None
+    if all_sessions:
+        files = [p for folder in sessions for p in folder.glob('*.log')]
+        for directory, pattern in [('conversations', '*.jsonl'), ('timing', '*.log')]:
+            files.extend((logs / directory).glob(pattern))
+        return session, sorted(p for p in set(files) if p.resolve().is_relative_to(logs.resolve()))
     if session:
         try:
             cutoff = datetime.strptime(session.name, '%Y%m%dT%H%M%S_%fZ').replace(tzinfo=timezone.utc).timestamp() - 5
@@ -164,8 +169,9 @@ def transcript(files):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-only', action='store_true', help='Print log checks without making a ZIP')
+    parser.add_argument('--all-sessions', action='store_true', help='Include all existing log sessions, including chats before a service restart')
     args = parser.parse_args()
-    session, files = recent_files(ROOT)
+    session, files = recent_files(ROOT, all_sessions=args.all_sessions)
     if not files:
         parser.exit(1, 'No recent service/timing/conversation logs found. Start services and complete a chat first.\n')
     report = inspect(ROOT, files)

@@ -1,0 +1,72 @@
+{
+  "question": "Chuyển sang thư viện Demo: mỗi lần tôi được mượn tối đa mấy cuốn sách và trong bao lâu?",
+  "domains": [
+    {
+      "id": "administrative_procedures",
+      "description": "Tra cứu thủ tục hành chính tại phường Tăng Nhơn Phú: đăng ký khai sinh, khai tử, kết hôn, xác nhận tình trạng hôn nhân, chứng thực, hộ kinh doanh, đất đai, trợ cấp xã hội và học bổng chính sách.",
+      "examples": [
+        "Đăng ký khai sinh mất bao lâu và lệ phí bao nhiêu?",
+        "Đăng ký khai tử cần những giấy tờ gì?",
+        "Đăng ký kết hôn nộp hồ sơ ở đâu?"
+      ]
+    },
+    {
+      "id": "amazon_products",
+      "description": "Dữ liệu này chứa thông tin chi tiết về các sản phẩm điện tử và gia dụng được bán trên Amazon, bao gồm tên sản phẩm, danh mục, giá cả (giảm giá và giá gốc), tỷ lệ giảm giá, đánh giá của người dùng, số lượng đánh giá, mô tả sản phẩm, và liên kết sản phẩm. Ngoài ra, còn có thông tin về người dùng và nội dung đánh giá của họ.",
+      "examples": [
+        "Tìm các sản phẩm cáp USB có đánh giá trên 4 sao.",
+        "Sản phẩm 'Wayona Nylon Braided USB to Lightning Fast Charging and Data Sync Cable' có giá bao nhiêu sau khi giảm giá?",
+        "Những sản phẩm nào thuộc danh mục 'Home&Kitchen' và có tỷ lệ giảm giá trên 50%?"
+      ]
+    },
+    {
+      "id": "entertainment_content",
+      "description": "Dữ liệu này bao gồm thông tin về các bộ phim và chương trình truyền hình, bao gồm tiêu đề, đạo diễn, dàn diễn viên, quốc gia sản xuất, ngày thêm vào nền tảng, năm phát hành, xếp hạng, thời lượng, thể loại và mô tả tóm tắt. Dữ liệu mẫu cho thấy các nội dung giải trí đa dạng từ nhiều quốc gia.",
+      "examples": [
+        "Phim \"Green Lantern\" do ai đạo diễn và có những diễn viên nào?",
+        "Có những bộ phim tài liệu nào được thêm vào năm 2021?",
+        "Chương trình truyền hình \"Beyond Evil\" thuộc thể loại gì và phát hành năm nào?"
+      ]
+    },
+    {
+      "id": "maker_lab_test",
+      "description": "Dữ liệu GIẢ LẬP về dịch vụ Xưởng Nhỏ tại Trạm Mây và Trạm Nắng: mượn và gia hạn máy khoan, mượn máy chiếu, đặt phòng làm việc, sửa máy khoan và làm thẻ thành viên. Chứa giới hạn số lượng, thời hạn giữ thiết bị, điều kiện, thời gian xử lý yêu cầu, giá và quầy hỗ trợ riêng cho từng trạm. Không phải thư viện Demo, tuyển sinh đại học hay thủ tục hành chính.",
+      "examples": [
+        "Quy định sử dụng thiết bị của Xưởng Nhỏ tại Trạm Mây?",
+        "Xưởng Nhỏ tại Trạm Nắng có phòng làm việc không?",
+        "Xưởng Nhỏ hỗ trợ sửa chữa và gia hạn thiết bị thế nào?"
+      ]
+    },
+    {
+      "id": "university_admission",
+      "description": "This dataset contains information related to university admissions, including tuition fees, admission methods, application requirements, deadlines, scholarship details, and relevant source URLs for a specific university (ĐH Khoa học tự nhiên, ĐHQG-HCM) for the 2026 academic year.",
+      "examples": [
+        "Học phí ngành Sinh học là bao nhiêu?",
+        "Thông tin tuyển sinh phương thức 1b?",
+        "Cần nộp những hồ sơ gì cho phương thức 2?"
+      ]
+    },
+    {
+      "id": "university_test",
+      "description": "Dữ liệu giả lập về dịch vụ sinh viên tại cơ sở Demo: mượn và gia hạn sách thư viện, cấp lại thẻ sinh viên, đăng ký phòng tự học và xin bảng điểm. Bao gồm điều kiện, giới hạn sử dụng, thời gian xử lý, phí và địa điểm. Không cung cấp thông tin tuyển sinh hoặc học phí HCMUS.",
+      "examples": [
+        "Làm sao để mượn sách thư viện?",
+        "Tôi cần làm gì để cấp lại thẻ sinh viên?",
+        "Phí xin bảng điểm là bao nhiêu?"
+      ]
+    }
+  ],
+  "prior_domain": "administrative_procedures",
+  "prior_subjects": [
+    "Thủ tục đăng ký khai sinh"
+  ],
+  "requested_domain": "auto",
+  "allow_switching": true,
+  "captured_classifier_decision": {
+    "route": "followup"
+  },
+  "captured_reference_indices": [],
+  "captured_outcome": "LOW_CONFIDENCE in administrative_procedures",
+  "expected_domain": "university_test",
+  "note": "Captured failure inputs. Corrected classifier output in offline tests is mocked; no live success is implied."
+}

@@ -186,104 +186,122 @@ async def orchestrate_chat(conversation_id, payload, db):
     if reset_domain:
         active_titles = []
     question = payload.user_prompt.strip()
-    try:
-        pending_args = {'pending_question': pending_question} if pending_question else {}
-        config, state, switched = await choose_domain(question, state, active_titles,
-                                                      getattr(payload, 'domain', None), **pending_args)
-    except DomainConversation:
-        # A social interlude does not consume an unanswered clarification.
-        if pending_question:
-            checklist = dict(conversation.checklist or {})
-            checklist['_rag_pending_question'] = pending_question
-            conversation.checklist = checklist
-            with span('db.commit'):
-                await db.commit()
-        # Keep domain/subject memory for a later factual follow-up, but do not
-        # supply prior dataset facts to a greeting/thanks response.
-        @timed('backend.services.chat_orchestrator.conversation_stream')
-        async def conversation_stream():
-            parts = []
-            complete = False
-            async for frame in get_friendly_response_stream(payload.user_prompt.strip(), context_messages[-1:]):
-                if frame.strip() == 'data: [DONE]':
-                    complete = True
-                    continue
-                if frame.startswith('data:'):
-                    try:
-                        event = json.loads(frame[5:].strip())
-                        if event.get('type') == 'chunk':
-                            parts.append(event.get('text', ''))
-                    except (ValueError, AttributeError):
-                        pass
-                yield frame
-            answer = ''.join(parts)
-            await add_message(db, conversation_id, 'assistant', answer, ['RAG_ROUTE:conversation'])
-            await log_interaction(db, conversation_id, payload.user_prompt, answer, None, False, None,
-                                  'CONVERSATION' if complete else 'INCOMPLETE_STREAM')
-            yield 'data: [DONE]\n\n'
-        return StreamingResponse(conversation_stream(), media_type='text/event-stream')
-    except DomainClarification as exc:
-        text = str(exc)
-        no_match = isinstance(exc, DomainNoMatch)
-        if no_match:
-            # A no-dataset result must not leave old evidence as the next turn's subject.
-            await update_domain_state(db, conversation_id,
-                {'selection': 'auto', 'locked': False,
-                 'allow_switching': state.get('allow_switching', False)}, clear_procedure=True)
-        if not no_match and enabled('RAG_RESUME_CLARIFICATION'):
-            checklist = dict(conversation.checklist or {})
-            # Replace rather than append: repeated clarification cannot grow context indefinitely.
-            unresolved = pending_question or question
-            # Never truncate away a late condition/negation and later answer a different question.
-            if len(unresolved) <= 2000:
-                checklist['_rag_pending_question'] = unresolved
-            conversation.checklist = checklist
-            with span('db.commit'):
-                await db.commit()
-        await add_message(db, conversation_id, 'assistant', text, ['RAG_ROUTE:none'] if no_match else [])
-        await log_interaction(db, conversation_id, payload.user_prompt, text, None, False, None,
-                              'DOMAIN_NONE' if no_match else 'DOMAIN_CLARIFICATION')
-        # Copy exception data before Python clears the except variable.
-        choices = exc.domains
-        @timed('backend.services.chat_orchestrator.clarification_stream')
-        async def clarification_stream():
-            yield f"data: {json.dumps({'type': 'metadata', 'sources': [], 'domain_choices': choices}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'chunk', 'text': text}, ensure_ascii=False)}\n\n"
-            yield 'data: [DONE]\n\n'
-        return StreamingResponse(clarification_stream(), media_type='text/event-stream')
-    resumed = bool(state.pop('resume_pending', False) and pending_question)
-    if resumed:
-        question = 'Câu hỏi cần trả lời: ' + pending_question + '\nĐối tượng được người dùng làm rõ: ' + question
-        active_titles = []
-        emit('rag.clarification', 'resumed', pending_question=pending_question, question=payload.user_prompt)
-    switched = switched or reset_domain
-    await update_domain_state(db, conversation_id, state, clear_procedure=switched)
-    if switched:
-        active_titles = []
-    elif not resumed:
-        active_titles = active_procedures(context_messages, last_proc_title, config.name)
-    mode = resolve_mode(getattr(payload, "mode", None), config)
-    retrieve = mode == "strict" or await needs_retrieval(question, active_titles, config)
-    if retrieve:
-        # Routing chooses a dataset. Reference resolution separately decides
-        # whether a same-domain question still needs the previous subject.
-        search_query, followup_titles = resolve_search_query(question, active_titles, config)
-        if active_titles and not followup_titles:
-            try:
-                search_query = await resolve_references(question, active_titles, config)
-            except RAGUnavailableError as exc:
-                raise HTTPException(503, 'Không thể xác định ngữ cảnh câu hỏi. Vui lòng thử lại hoặc nêu rõ đối tượng.') from exc
-        stream_gen, max_score = await get_legal_response_stream(
-            prompt=question, search_query=search_query,
-            active_procedures=followup_titles,
-            domain=config.name, mode=mode, use_cache=not getattr(payload, 'bypass_answer_cache', False),
-            answer_guidance=getattr(payload, 'answer_guidance', None),
-        )
-    else:
-        # A switched domain starts a fresh model context; previous dataset facts stay isolated.
-        friendly_history = domain_history(context_messages, config.name) if not switched else context_messages[-1:]
-        stream_gen = get_friendly_response_stream(payload.user_prompt.strip(), friendly_history, config)
-        max_score = None  # No retrieval was performed; never invent a relevance score.
+    allow_followup = True
+    while True:
+        try:
+            pending_args = {'pending_question': pending_question} if pending_question else {}
+            if not allow_followup:
+                pending_args['allow_followup'] = False
+            config, state, switched = await choose_domain(question, state, active_titles,
+                                                          getattr(payload, 'domain', None), **pending_args)
+        except DomainConversation:
+            # A social interlude does not consume an unanswered clarification.
+            if pending_question:
+                checklist = dict(conversation.checklist or {})
+                checklist['_rag_pending_question'] = pending_question
+                conversation.checklist = checklist
+                with span('db.commit'):
+                    await db.commit()
+            # Keep domain/subject memory for a later factual follow-up, but do not
+            # supply prior dataset facts to a greeting/thanks response.
+            @timed('backend.services.chat_orchestrator.conversation_stream')
+            async def conversation_stream():
+                parts = []
+                complete = False
+                async for frame in get_friendly_response_stream(payload.user_prompt.strip(), context_messages[-1:]):
+                    if frame.strip() == 'data: [DONE]':
+                        complete = True
+                        continue
+                    if frame.startswith('data:'):
+                        try:
+                            event = json.loads(frame[5:].strip())
+                            if event.get('type') == 'chunk':
+                                parts.append(event.get('text', ''))
+                        except (ValueError, AttributeError):
+                            pass
+                    yield frame
+                answer = ''.join(parts)
+                await add_message(db, conversation_id, 'assistant', answer, ['RAG_ROUTE:conversation'])
+                await log_interaction(db, conversation_id, payload.user_prompt, answer, None, False, None,
+                                      'CONVERSATION' if complete else 'INCOMPLETE_STREAM')
+                yield 'data: [DONE]\n\n'
+            return StreamingResponse(conversation_stream(), media_type='text/event-stream')
+        except DomainClarification as exc:
+            text = str(exc)
+            no_match = isinstance(exc, DomainNoMatch)
+            if no_match:
+                # A no-dataset result must not leave old evidence as the next turn's subject.
+                await update_domain_state(db, conversation_id,
+                    {'selection': 'auto', 'locked': False,
+                     'allow_switching': state.get('allow_switching', False)}, clear_procedure=True)
+            if not no_match and enabled('RAG_RESUME_CLARIFICATION'):
+                checklist = dict(conversation.checklist or {})
+                # Replace rather than append: repeated clarification cannot grow context indefinitely.
+                unresolved = pending_question or question
+                # Never truncate away a late condition/negation and later answer a different question.
+                if len(unresolved) <= 2000:
+                    checklist['_rag_pending_question'] = unresolved
+                conversation.checklist = checklist
+                with span('db.commit'):
+                    await db.commit()
+            await add_message(db, conversation_id, 'assistant', text, ['RAG_ROUTE:none'] if no_match else [])
+            await log_interaction(db, conversation_id, payload.user_prompt, text, None, False, None,
+                                  'DOMAIN_NONE' if no_match else 'DOMAIN_CLARIFICATION')
+            # Copy exception data before Python clears the except variable.
+            choices = exc.domains
+            @timed('backend.services.chat_orchestrator.clarification_stream')
+            async def clarification_stream():
+                yield f"data: {json.dumps({'type': 'metadata', 'sources': [], 'domain_choices': choices}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'chunk', 'text': text}, ensure_ascii=False)}\n\n"
+                yield 'data: [DONE]\n\n'
+            return StreamingResponse(clarification_stream(), media_type='text/event-stream')
+        resumed = bool(state.pop('resume_pending', False) and pending_question)
+        if resumed:
+            question = 'Câu hỏi cần trả lời: ' + pending_question + '\nĐối tượng được người dùng làm rõ: ' + question
+            active_titles = []
+            emit('rag.clarification', 'resumed', pending_question=pending_question, question=payload.user_prompt)
+        switched = switched or reset_domain
+        await update_domain_state(db, conversation_id, state, clear_procedure=switched)
+        if switched or not allow_followup:
+            active_titles = []
+        elif not resumed:
+            active_titles = active_procedures(context_messages, last_proc_title, config.name)
+        mode = resolve_mode(getattr(payload, "mode", None), config)
+        retrieve = mode == "strict" or await needs_retrieval(question, active_titles, config)
+        if retrieve:
+            # Routing chooses a dataset. Reference resolution separately decides
+            # whether a same-domain question still needs the previous subject.
+            search_query, followup_titles = resolve_search_query(question, active_titles, config)
+            if active_titles and not followup_titles:
+                try:
+                    search_query = await resolve_references(question, active_titles, config)
+                except RAGUnavailableError as exc:
+                    raise HTTPException(503, 'Không thể xác định ngữ cảnh câu hỏi. Vui lòng thử lại hoặc nêu rõ đối tượng.') from exc
+            if (allow_followup and state.get('route_action') == 'followup'
+                    and state.get('selection') == 'auto' and state.get('allow_switching')
+                    and not followup_titles and search_query.strip() == question.strip()):
+                # The route claimed a continuation, but the existing reference call
+                # returned no subjects. Resolve this disagreement before any RAG call.
+                emit('rag.routing_consistency', 'retry_without_followup',
+                     rejected_domain=config.name, question=question,
+                     reason='followup_without_resolved_subject')
+                allow_followup = False
+                active_titles = []
+                pending_question = None
+                continue
+            stream_gen, max_score = await get_legal_response_stream(
+                prompt=question, search_query=search_query,
+                active_procedures=followup_titles,
+                domain=config.name, mode=mode, use_cache=not getattr(payload, 'bypass_answer_cache', False),
+                answer_guidance=getattr(payload, 'answer_guidance', None),
+            )
+        else:
+            # A switched domain starts a fresh model context; previous dataset facts stay isolated.
+            friendly_history = domain_history(context_messages, config.name) if not switched else context_messages[-1:]
+            stream_gen = get_friendly_response_stream(payload.user_prompt.strip(), friendly_history, config)
+            max_score = None  # No retrieval was performed; never invent a relevance score.
+
+        break
 
     @timed('backend.services.chat_orchestrator.stream_and_save_to_db')
     async def stream_and_save_to_db():

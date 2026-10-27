@@ -9,3 +9,5 @@ docker tag legal_llm-rag-service:latest namnhedu/legal_llm-rag-service:latest
 docker push namnhedu/legal_llm-chat-service:latest
 docker push namnhedu/legal_llm-llm-service:latest
 docker push namnhedu/legal_llm-rag-service:latest
+
+env\Scripts\python.exe tests\collect_diagnostics.py

@@ -99,8 +99,8 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(config.name, 'administrative_procedures')
         self.assertTrue(changed)
         request = json.loads(self.requests[0]['messages'][1]['content'])
-        self.assertNotIn('followup_context_available', request)
-        self.assertNotIn('current_domain', request)
+        self.assertTrue(request['followup_context_available'])
+        self.assertEqual(request['active_context'], {'domain':'university_admission','subjects':['Học phí Sinh học']})
         self.assertNotIn('active_entities', request)
 
     def test_clear_property_followup_unchanged(self):
@@ -251,22 +251,24 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(set(request), {'domains', 'question'})
         self.assertIn('without guessing an old topic', self.requests[0]['messages'][0]['content'])
 
-    def test_prior_domain_identity_and_subject_are_not_sent(self):
+    def test_only_compact_source_context_is_sent(self):
         self.decision = {'route': 'administrative_procedures'}
-        self.choose(question='A new subject?', state={'name':'university_admission', 'allow_switching':True}, titles=['UNIQUE_PRIVATE_OLD_SUBJECT'])
-        raw = self.requests[0]['messages'][1]['content']
-        self.assertNotIn('UNIQUE_PRIVATE_OLD_SUBJECT', raw)
-        self.assertNotIn('optional_previous_context', raw)
-        self.assertNotIn('current_domain', raw)
-        self.assertNotIn('followup_context_available', json.loads(raw))
+        self.choose(question='A new subject?', state={'name':'university_admission', 'allow_switching':True}, titles=['Prior public subject'])
+        request = json.loads(self.requests[0]['messages'][1]['content'])
+        self.assertEqual(request['active_context'], {'domain':'university_admission','subjects':['Prior public subject']})
+        self.assertNotIn('history', request)
+        self.assertEqual(list(request)[-1], 'question')
 
-    def test_routing_input_is_identical_before_and_after_another_subject(self):
+    def test_current_question_is_preserved_when_context_is_added(self):
         self.choose(question='A standalone library question')
-        first = self.requests[-1]
+        first = json.loads(self.requests[-1]['messages'][1]['content'])
         self.choose(question='A standalone library question',
             state={'name':'administrative_procedures', 'allow_switching':True},
             titles=['Old birth registration'])
-        self.assertEqual(first, self.requests[-1])
+        second = json.loads(self.requests[-1]['messages'][1]['content'])
+        self.assertEqual(first['question'],second['question'])
+        self.assertEqual(first['domains'],second['domains'])
+        self.assertEqual(second['active_context']['subjects'],['Old birth registration'])
 
     def test_followup_action_is_exposed_to_query_resolution(self):
         self.decision = {'route':'followup'}

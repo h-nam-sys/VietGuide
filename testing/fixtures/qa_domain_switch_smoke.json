@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "purpose": "Regression for captured false-followup domain switch; engineering test, not research benchmark.",
+  "scenarios": [
+    {
+      "id": "explicit_domain_switch_after_followups",
+      "requires": [
+        "administrative_procedures",
+        "university_test"
+      ],
+      "mode": "strict",
+      "allow_switching": true,
+      "domain": "auto",
+      "turns": [
+        {
+          "prompt": "Đăng ký khai sinh cần những giấy tờ gì?",
+          "expected": {
+            "domain": "administrative_procedures",
+            "records": [
+              "Thủ tục đăng ký khai sinh"
+            ],
+            "fields": [
+              "required_documents"
+            ],
+            "exact_records": true
+          }
+        },
+        {
+          "prompt": "Lệ phí bao nhiêu và mất bao lâu?",
+          "expected": {
+            "domain": "administrative_procedures",
+            "records": [
+              "Thủ tục đăng ký khai sinh"
+            ],
+            "exact_records": true,
+            "answer_patterns": [
+              "(?:1|mot) ngay",
+              "8[., ]?000"
+            ],
+            "require_answer_patterns": true
+          }
+        },
+        {
+          "prompt": "Cảm ơn bạn.",
+          "expected": {
+            "routes": [
+              "conversation"
+            ],
+            "no_retrieval": true
+          }
+        },
+        {
+          "prompt": "Tôi nộp hồ sơ ở đâu?",
+          "expected": {
+            "domain": "administrative_procedures",
+            "records": [
+              "Thủ tục đăng ký khai sinh"
+            ],
+            "exact_records": true,
+            "answer_patterns": [
+              "trung tam phuc vu hanh chinh cong"
+            ],
+            "require_answer_patterns": true
+          }
+        },
+        {
+          "prompt": "Chuyển sang thư viện Demo: mỗi lần tôi được mượn tối đa mấy cuốn sách và trong bao lâu?",
+          "expected": {
+            "domain": "university_test",
+            "records": [
+              "Mượn sách thư viện"
+            ],
+            "exact_records": true,
+            "answer_patterns": [
+              "(?:3|ba) (?:cuon|quyen)",
+              "(?:14|muoi bon) ngay|hai tuan|2 tuan"
+            ],
+            "require_answer_patterns": true
+          }
+        },
+        {
+          "prompt": "Cuốn sách mình đang mượn tại thư viện Demo đã có người đặt trước rồi; mình còn được gia hạn không?",
+          "expected": {
+            "domain": "university_test",
+            "records": [
+              "Gia hạn sách thư viện"
+            ],
+            "exact_records": true,
+            "answer_patterns": [
+              "dat truoc|nguoi dat"
+            ],
+            "require_answer_patterns": true,
+            "fields": [
+              "description"
+            ]
+          },
+          "manual_oracle": "The recorded renewal condition is not met because another person has reserved the book. Explain that renewal is unavailable in this situation; merely quoting the rule needs manual completeness review."
+        }
+      ]
+    }
+  ]
+}
