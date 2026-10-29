@@ -2,6 +2,7 @@
 import asyncio
 from functools import lru_cache
 import math
+import os
 from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from .domain_config import RAGUnavailableError, llm_url
@@ -13,13 +14,16 @@ from .gpu_runtime import EMBED_MODEL
 def _client(base_url):
     import httpx
     # Local model requests can wait for the same serialized GPU queue as Qwen.
-    return httpx.Client(base_url=base_url, timeout=None, trust_env=False)
+    return httpx.Client(base_url=base_url, timeout=httpx.Timeout(float(os.getenv('GPU_SERVICE_TIMEOUT', '300')), connect=5, pool=10), trust_env=False)
 
 
 def gpu_call(path, payload):
     try:
         with span('rag.directml.service_call'):
-            response = _client(llm_url()).post(path, json=payload, headers=trace_headers())
+            headers = trace_headers()
+            if os.getenv('LEGAL_INGESTION') == '1':
+                headers['X-Inference-Priority'] = 'background'
+            response = _client(llm_url()).post(path, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
     except Exception as exc:
@@ -52,6 +56,9 @@ class RemoteDirectMLEmbedding(BaseEmbedding):
 
     def _get_text_embeddings(self, texts):
         result = []
-        for start in range(0, len(texts), 32):
-            result.extend(self._vectors(texts[start:start + 32], 'text'))
+        batch = int(os.getenv('INGEST_EMBED_BATCH', '4')) if os.getenv('LEGAL_INGESTION') == '1' else 32
+        if not 1 <= batch <= 32:
+            raise ValueError('Invalid embedding batch size')
+        for start in range(0, len(texts), batch):
+            result.extend(self._vectors(texts[start:start + batch], 'text'))
         return result

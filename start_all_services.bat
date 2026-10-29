@@ -13,6 +13,6 @@ if errorlevel 1 (
     exit /b 1
 )
 set "PYTHONIOENCODING=utf-8"
-"env\Scripts\python.exe" -u run_services.py
+"env\Scripts\python.exe" -u run_services.py %*
 if errorlevel 1 pause
 endlocal

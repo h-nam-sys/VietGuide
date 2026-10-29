@@ -1,15 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, Header, Request, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlalchemy.future import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schemas import ChatRequest, ChatResponse, StartConversationRequest, ConversationSchema, MCPActionRequest
 from services.llm_service import get_legal_response_stream
 from services.mcp_service import execute_mcp_search, MCPSearchError
 from rag.mcp_config import load_settings, search_enabled, MCPConfigError
 from services.mcp_permission import authorize_pending, search_locks
-from database import User
+from database import User, Message
 from rate_limiter import limiter
 from services.db_service import (
     create_conversation,
@@ -45,12 +45,27 @@ async def available_domains():
              'default_mode': c.profile.get('default_mode', 'strict')} for c in ready_domains()]
 
 class FeedbackRequest(BaseModel):
-    rating: int
+    rating: int = Field(ge=0, le=1)
 
-def get_current_user(x_user_id: str = Header(default=None)):
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="User ID missing. Please log in.")
-    return x_user_id
+from services.session_auth import get_current_user
+from rag.admin_access import admin_password, valid_admin_password
+
+
+async def owned_conversation(db, conversation_id, current_user_id):
+    conversation = await get_conversation(db, conversation_id)
+    if conversation:
+        owner = (await db.execute(select(User.user_id).where(User.id == conversation.user_id))).scalar_one_or_none()
+        if owner == current_user_id:
+            return conversation
+    raise HTTPException(404, 'Conversation not found')
+
+
+def require_admin(x_admin_key: str = Header(default='')):
+    if not admin_password():
+        raise HTTPException(503, 'Configure ADMIN_PASSWORD before using administration')
+    if not valid_admin_password(x_admin_key):
+        raise HTTPException(403, 'Administrator access required')
+
 
 def parse_sources(sources_data):
     if not sources_data:
@@ -143,6 +158,7 @@ async def handle_chat(
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user)
 ):
+    await owned_conversation(db, conversation_id, current_user_id)
     from services.chat_orchestrator import orchestrate_chat
     return await orchestrate_chat(conversation_id, payload, db)
 
@@ -159,12 +175,8 @@ async def action_mcp(
     if payload is None:
         raise HTTPException(400, 'Vui lòng làm mới giao diện chat và chọn Có trên đề nghị tìm kiếm cụ thể.')
     async with search_locks.hold(conversation_id):
-        conversation = await get_conversation(db, conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        # Keep the project's existing mock-login contract; check conversation ownership here.
-        with span('db.execute'):
-            owner = (await db.execute(select(User.user_id).where(User.id == conversation.user_id))).scalar_one_or_none()
+        conversation = await owned_conversation(db, conversation_id, current_user_id)
+        owner = current_user_id
         pending = authorize_pending(conversation, current_user_id, owner, payload.offer_message_id)
         from rag.domain_config import load_domain_config, RAGConfigurationError
         try:
@@ -206,9 +218,7 @@ async def action_form(
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user)
 ):
-    conversation = await get_conversation(db, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = await owned_conversation(db, conversation_id, current_user_id)
     from rag.domain_config import load_domain_config, RAGConfigurationError
     name = (conversation.checklist or {}).get('_domain_state', {}).get('name')
     try:
@@ -276,9 +286,7 @@ async def get_chat_history(
     current_user_id: str = Depends(get_current_user)
 ):
     try:
-        conversation = await get_conversation(db, conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = await owned_conversation(db, conversation_id, current_user_id)
 
         messages = await get_conversation_history(db, conversation_id)
 
@@ -317,6 +325,12 @@ async def submit_feedback(
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user)
 ):
+    message = (await db.execute(select(Message).where(Message.id == message_id))).scalar_one_or_none()
+    if not message:
+        raise HTTPException(404, 'Message not found')
+    await owned_conversation(db, message.conversation_id, current_user_id)
+    if message.role != 'assistant':
+        raise HTTPException(400, 'Only assistant answers can be rated')
     try:
         await update_message_rating(db, message_id, payload.rating)
         return {"status": "success"}
@@ -326,8 +340,9 @@ async def submit_feedback(
 @router.get("/admin/failed-logs")
 @timed('backend.routers.chat.get_failed_queries')
 async def get_failed_queries(
-    limit: int = 50,
-    db: AsyncSession = Depends(get_db)
+    limit: int = Query(default=50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    admin: None = Depends(require_admin)
 ):
     with span('db.execute'):
         result = await db.execute(

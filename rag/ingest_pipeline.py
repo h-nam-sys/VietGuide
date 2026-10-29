@@ -216,7 +216,9 @@ def main():
         print(f'Saved profile draft: {args.save_draft}')
         return
     if not args.dry_run:
-        with domain_lock(config.name):
+        from .process_lock import process_lock
+        os.environ['LEGAL_INGESTION'] = '1'
+        with domain_lock(config.name), process_lock(ROOT_DIR/'data/ops_locks/ingestion.lock',timeout=86400):
             generation = publish_generation(config, records, report, progress=lambda stage: print(stage, flush=True))
             save_profile_registry(config.profile)
         print(f"Activated {config.name} generation {generation}")

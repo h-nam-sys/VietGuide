@@ -229,7 +229,7 @@ def status_page():
     if st.button('Làm mới trạng thái'):
         st.rerun()
     status_labels = {'queued': 'Đang chờ', 'running': 'Đang xử lý', 'failed': 'Thất bại', 'completed': 'Hoàn tất', 'succeeded': 'Hoàn tất'}
-    stage_labels = {'Waiting for worker': 'Chờ tiến trình xử lý', 'Worker stopped before completion': 'Tiến trình dừng trước khi hoàn tất', 'Could not start worker': 'Không thể khởi chạy tiến trình', 'Reading and validating uploaded file': 'Đọc và xác thực tệp', 'Writing SQL snapshot': 'Lưu phiên bản dữ liệu', 'Building and verifying vector index': 'Tạo và kiểm tra chỉ mục tìm kiếm', 'Activating completed snapshot': 'Kích hoạt phiên bản dữ liệu', 'Domain is ready for chat': 'Sẵn sàng sử dụng', 'Ingestion failed': 'Nhập dữ liệu thất bại'}
+    stage_labels = {'Waiting for ingestion slot': 'Chờ tác vụ nhập dữ liệu trước hoàn tất', 'Waiting for worker': 'Chờ tiến trình xử lý', 'Worker stopped before completion': 'Tiến trình dừng trước khi hoàn tất', 'Could not start worker': 'Không thể khởi chạy tiến trình', 'Reading and validating uploaded file': 'Đọc và xác thực tệp', 'Writing SQL snapshot': 'Lưu phiên bản dữ liệu', 'Building and verifying vector index': 'Tạo và kiểm tra chỉ mục tìm kiếm', 'Activating completed snapshot': 'Kích hoạt phiên bản dữ liệu', 'Domain is ready for chat': 'Sẵn sàng sử dụng', 'Ingestion failed': 'Nhập dữ liệu thất bại'}
     jobs = list_jobs()
     if not jobs:
         st.info('Chưa có tác vụ nhập dữ liệu.')

@@ -69,11 +69,13 @@ start_all_services.bat
 | Admin dashboard | <http://localhost:8501> |
 | API documentation | <http://localhost:8000/docs> |
 
+Set `ADMIN_PASSWORD` in your local `.env` before opening the admin dashboard. Chat visitors do not need this password. For HTTPS deployment, set `SESSION_COOKIE_SECURE=1`; see [deployment notes](docs/SESSION_UPDATE.md).
+
 Keep the launcher terminal open. Press **Ctrl+C** to stop the services.
 
 ## Usage
 
-Open the chat page, enter a demo username and select automatic routing or a specific dataset. Enable topic switching when you want to move between datasets in one conversation.
+Open the chat page and select automatic routing or a specific dataset. No login is required. A persistent browser cookie grants access to your chat history; clearing it or switching browsers starts a separate history. Enable topic switching when you want to move between datasets in one conversation.
 
 With the corresponding demo datasets loaded, try:
 
@@ -123,6 +125,10 @@ flowchart TD
 ```
 
 The backend selects a dataset, resolves conversational references and retrieves relevant records. The shared model service provides generation, embeddings and reranking. Responses and their sources are saved with the conversation.
+
+## Deployment
+
+See [deployment operations](deployment/README.md) for production startup, HTTPS, backups, monitoring and the target-machine acceptance check.
 
 ## Testing
 

@@ -4,6 +4,7 @@ import functools
 import inspect
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import re
 import time
@@ -70,7 +71,7 @@ if not _logger.handlers:
         directory = Path(__file__).resolve().parents[1] / 'logs' / 'timing'
         directory.mkdir(parents=True, exist_ok=True)
         filename = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ') + f'_{os.getpid()}.log'
-        file_handler = logging.FileHandler(directory / filename, encoding='utf-8')
+        file_handler = RotatingFileHandler(directory / filename, maxBytes=10_000_000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
         _logger.addHandler(file_handler)
     except OSError:

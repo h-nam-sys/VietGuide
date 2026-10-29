@@ -22,6 +22,28 @@ API_URL = "http://localhost:8000" # Update this if your FastAPI runs on a differ
 
 st.set_page_config(page_title="Bảng quản trị", layout="wide")
 
+# Admin access is separate from anonymous chat. An unset password fails closed.
+from rag.admin_access import admin_password, valid_admin_password
+if not admin_password():
+    st.error('Đặt ADMIN_PASSWORD trong .env rồi khởi động lại dịch vụ để mở quản trị.')
+    st.stop()
+if not valid_admin_password(st.session_state.get('_admin_authenticated', '')):
+    st.title('Quản trị hệ thống')
+    with st.form('admin_access', clear_on_submit=True):
+        password = st.text_input('Mật khẩu quản trị', type='password')
+        submitted = st.form_submit_button('Mở quản trị')
+    if submitted:
+        if valid_admin_password(password):
+            st.session_state['_admin_authenticated'] = password
+            st.rerun()
+        else:
+            st.error('Mật khẩu không đúng.')
+    st.stop()
+if st.sidebar.button('Đóng phiên quản trị'):
+    st.session_state.pop('_admin_authenticated', None)
+    st.rerun()
+
+
 # --- DATA FETCHING ---
 from rag.timing import timed, span, emit, TimedLock, trace_headers, TimingMiddleware, trace_id
 
@@ -79,6 +101,25 @@ with tab1:
     col4.metric("Câu hỏi từ người dùng", user_msgs)
 
     st.divider()
+    st.subheader('Vận hành dịch vụ')
+    if st.button('Làm mới vận hành'):
+        st.rerun()
+    try:
+        response = requests.get(f'{API_URL}/admin/operations', headers={'X-Admin-Key': admin_password()}, timeout=12)
+        response.raise_for_status()
+        status = response.json()
+        ready = status['readiness']['ready']
+        (st.success if ready else st.warning)('Sẵn sàng trả lời' if ready else 'Có thành phần chưa sẵn sàng')
+        queue = status['backend']['queues'].get('chat', {})
+        a, b, c = st.columns(3)
+        a.metric('Đang xử lý', queue.get('active', 0))
+        b.metric('Đang chờ', queue.get('waiting', 0))
+        c.metric('Lượt từ chối do giới hạn', queue.get('rejected', 0))
+        with st.expander('Thời gian, bộ nhớ và trạng thái thành phần'):
+            st.caption('Số liệu trong tiến trình hiện tại; thời gian chữ trả lời đầu tiên không phải token đầu tiên của model. RSS không phải VRAM.')
+            st.json(status)
+    except Exception:
+        st.warning('Chưa lấy được trạng thái backend. Kiểm tra dịch vụ và ADMIN_PASSWORD.')
 
     # Chart: Messages over time
     if not msg_df.empty:
@@ -176,7 +217,7 @@ with tab4:
         st.cache_data.clear()
 
     try:
-        response = requests.get(f"{API_URL}/admin/failed-logs")
+        response = requests.get(f"{API_URL}/admin/failed-logs", headers={"X-Admin-Key": admin_password()}, timeout=10)
         if response.status_code == 200:
             failed_logs = response.json()
             if failed_logs:

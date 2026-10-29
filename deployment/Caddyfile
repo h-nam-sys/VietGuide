@@ -1,0 +1,20 @@
+# Set PUBLIC_HOST to your DNS hostname in Caddy's environment before starting.
+# Do not publish the admin dashboard or model ports.
+{$PUBLIC_HOST} {
+	@private path /admin/* /docs /docs/* /redoc /openapi.json
+	respond @private 404
+
+	request_body {
+		max_size 256KB
+	}
+	reverse_proxy 127.0.0.1:8000 {
+		# Caddy flushes text/event-stream immediately by default.
+		# Keep disconnect cancellation enabled; do not set flush_interval -1.
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 330s
+		}
+	}
+	header X-Content-Type-Options nosniff
+	header Referrer-Policy same-origin
+}

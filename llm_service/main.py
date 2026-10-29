@@ -22,6 +22,10 @@ import llama_cpp.llama_cpp as llama_api
 load_dotenv(ROOT_DIR / "backend/.env")
 load_dotenv(ROOT_DIR / ".env")
 app = FastAPI(title="Legal LLM Service")
+from rag.request_capacity import RequestCapacityMiddleware
+from rag.operations import OperationsMiddleware
+app.add_middleware(RequestCapacityMiddleware, kind='inference')
+app.add_middleware(OperationsMiddleware, service='llm')
 app.add_middleware(TimingMiddleware, service='llm')
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "models/qwen3.5_4b.gguf"))
 if not MODEL_PATH.is_absolute():
@@ -121,9 +125,16 @@ def _gpu_reranker():
         return LocalDirectMLReranker()
 
 
+@app.get('/health')
+def health():
+    return {'alive': True}
+
+
 @app.get('/v1/rag/status')
 def gpu_status():
+    from rag.deployment_config import model_assets
     return {'gpu_protocol': 1, 'qwen_ready': True,
+            'retrieval_assets_ready': model_assets(ROOT_DIR, check_runtime=True)['retrieval_assets'],
             'embedding_loaded': bool(_gpu_embedding.cache_info().currsize),
             'reranker_loaded': bool(_gpu_reranker.cache_info().currsize),
             'gpu_queue_busy': _model_lock.locked()}
@@ -155,6 +166,12 @@ def gpu_rerank(payload: GPURerankRequest):
         raise HTTPException(503, 'DirectML reranker unavailable; inspect LLM timing logs. CPU fallback is disabled.') from exc
 
 
+@app.get('/v1/operations')
+def operational_status():
+    from rag.operations import snapshot
+    return snapshot()
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=llm_port())
+    uvicorn.run(app, host=os.getenv("LLM_BIND_HOST", "127.0.0.1"), port=llm_port())

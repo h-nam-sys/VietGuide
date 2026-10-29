@@ -81,7 +81,7 @@ def start_job(input_path, profile, *, sheet=0, root=None):
     atomic_json(path, job)
     log_path = path.with_suffix('.log')
     try:
-        env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1', 'LEGAL_TIMING_TRACE_ID': trace_id()}
+        env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1', 'LEGAL_TIMING_TRACE_ID': trace_id(), 'LEGAL_INGESTION': '1'}
         with log_path.open('w', encoding='utf-8') as log:
             process = subprocess.Popen([sys.executable, '-u', '-m', 'rag.ingestion_jobs', '--job-file', str(path)],
                 cwd=ROOT_DIR, stdout=log, stderr=subprocess.STDOUT, env=env,
@@ -116,7 +116,7 @@ def list_jobs(*, root=None):
 
 
 @timed('rag.ingestion_jobs.run_job')
-def run_job(path, *, vector_builder=None):
+def _run_job(path, *, vector_builder=None):
     from .domain_onboarding import config_from_profile, save_profile_registry
     from .ingest_pipeline import read_input, prepare_records, publish_generation, build_vectors
     path = Path(path)
@@ -154,6 +154,24 @@ def run_job(path, *, vector_builder=None):
     return True
 
 
+def run_job(path, *, vector_builder=None):
+    from .process_lock import process_lock
+    path = Path(path)
+    root = path.parents[2]
+    job = read_json(path)
+    job.update(stage='Waiting for ingestion slot', updated_at=now())
+    atomic_json(path, job)
+    # Only one dataset builds embeddings at a time, across all worker processes.
+    try:
+        with process_lock(root / 'data/ops_locks/ingestion.lock', timeout=86400):
+            return _run_job(path, vector_builder=vector_builder)
+    except Exception as exc:
+        job.update(status='failed', stage='Ingestion failed', error=type(exc).__name__ + ': see worker log', updated_at=now())
+        atomic_json(path, job)
+        release(lock_path(job['domain'], root), job['id'])
+        return False
+
+
 if __name__ == '__main__':
     from dotenv import load_dotenv
     load_dotenv(ROOT_DIR / 'backend/.env')
@@ -161,4 +179,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--job-file', type=Path, required=True)
     args = parser.parse_args()
+    os.environ['LEGAL_INGESTION'] = '1'
     sys.exit(0 if run_job(args.job_file) else 1)

@@ -12,6 +12,7 @@ import difflib
 import hashlib
 import time
 import unicodedata
+import http.cookiejar
 import urllib.error
 import urllib.request
 import uuid
@@ -62,10 +63,12 @@ def unit_equivalent_text(value):
     return text + (' ' + ' '.join(hints) if hints else '')
 
 
-def parse_sse(lines):
+def parse_sse(lines, started=None):
     parts, metadata, errors, done, buffer = [], {}, [], False, []
+    first_text_ms = None
+    started = time.perf_counter() if started is None else started
     def consume():
-        nonlocal done
+        nonlocal done, first_text_ms
         if not buffer:
             return
         data = '\n'.join(buffer)
@@ -76,6 +79,8 @@ def parse_sse(lines):
         try:
             value = json.loads(data)
             if value.get('type') == 'chunk':
+                if first_text_ms is None and value.get('text'):
+                    first_text_ms = round((time.perf_counter()-started)*1000, 3)
                 parts.append(value.get('text', ''))
             elif value.get('type') == 'metadata':
                 metadata.update(value)
@@ -91,7 +96,7 @@ def parse_sse(lines):
         elif line.startswith('data:'):
             buffer.append(line[5:].lstrip(' '))
     consume()
-    return {'answer': ''.join(parts), 'metadata': metadata, 'done': done, 'stream_errors': errors}
+    return {'answer': ''.join(parts), 'metadata': metadata, 'done': done, 'stream_errors': errors, 'first_text_ms': first_text_ms}
 
 
 class Client:
@@ -100,9 +105,14 @@ class Client:
         self.last_chat = None
         self.last_trace = None
         self.traces = set()
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.cookies = http.cookiejar.CookieJar()
+        self.csrf_token = ''
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(self.cookies))
 
     def request(self, path, payload=None, stream=False):
+        if payload is not None and not self.csrf_token:
+            session, _, _ = self.request('/session')
+            self.csrf_token = session['csrf_token']
         is_chat = bool(re.fullmatch(r'/chat/\d+', path))
         if is_chat and self.last_chat is not None:
             remaining = self.interval - (time.monotonic() - self.last_chat)
@@ -113,14 +123,19 @@ class Client:
         self.last_trace = trace
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8') if payload is not None else None
         request = urllib.request.Request(self.base + path, data=data,
-            headers={'Content-Type': 'application/json', 'X-User-ID': self.user_id,
+            headers={'Content-Type': 'application/json', 'X-Session-CSRF': self.csrf_token,
                      'X-Legal-Timing-Trace': trace})
         if is_chat:
             self.last_chat = time.monotonic()
         started = time.perf_counter()
         try:
             with self.opener.open(request, timeout=self.timeout) as response:
-                result = parse_sse(response) if stream else json.load(response)
+                result = parse_sse(response, started=started) if stream else json.load(response)
+            if path == '/session':
+                self.csrf_token = result['csrf_token']
+                token = next((c.value for c in self.cookies if c.name == 'legal_session'), '')
+                if token:
+                    self.user_id = 'anon:' + hashlib.sha256(token.split('.')[1].encode()).hexdigest()
             return result, trace, round((time.perf_counter() - started) * 1000, 3)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode('utf-8', errors='replace')[:1000]
@@ -450,7 +465,7 @@ def main():
     (directory/'source_audit.json').write_text(json.dumps(source_audit, ensure_ascii=False, indent=2), encoding='utf-8')
     total = sum(len(c['turns']) for c in selected) * args.repeats
     print(f'{total} turns in {len(selected)} scenarios. Suite: {args.suite}', flush=True)
-    print('Separate test user: ' + client.user_id, flush=True)
+    print('Separate test run: ' + client.user_id, flush=True)
     print('Uses the real backend/model. Keep services running; avoid other chats during the run.', flush=True)
     checkpoint = directory/'checkpoint.jsonl'
     results = execute_suite(client, selected, checkpoint, args.repeats, cacheless=args.cacheless)

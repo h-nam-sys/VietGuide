@@ -366,6 +366,25 @@ async def choose_domain(prompt, state, active_titles, requested=None, allow_swit
         classifier_event(diagnostic_task, 'clarification', reason='model_ambiguous')
         raise DomainClarification(list(choices))
     if route == 'none':
+        if contextual and switching and selection == 'auto':
+            # A previous subject can bias a valid new-topic request toward none.
+            # Retry against the same ready-domain descriptions without that subject.
+            # Empty state makes this bounded: the retry cannot enter recovery again.
+            classifier_event(diagnostic_task, 'recovery',
+                             reason='contextual_none_retry_without_subject', previous=current)
+            try:
+                recovered, recovered_state, _ = await choose_domain(
+                    prompt, {}, [], requested='auto', allow_switching=bool(switching),
+                    allow_followup=False)
+            except (DomainClarification, DomainConversation):
+                # Recovery may select a dataset, but cannot turn rejection into a
+                # greeting or invent a subject for an ambiguous/out-of-scope question.
+                classifier_event(diagnostic_task, 'decision', decision=decision, kind='none')
+            else:
+                classifier_event(diagnostic_task, 'selected', kind='domain',
+                                 previous=current, domain=recovered.name,
+                                 recovery='without_previous_subject')
+                return recovered, recovered_state, recovered.name != previous
         classifier_event(diagnostic_task, 'no_match', reason='model_none')
         raise DomainNoMatch()
     if route == 'conversation':

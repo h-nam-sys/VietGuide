@@ -6,3 +6,8 @@ logs
 
 __pycache__/
 *.py[cod]
+# Anonymous browser-session signing key (preserve locally; never commit)
+data/session_secret.key
+
+backups/
+deployment/runtime_dependencies.local.json

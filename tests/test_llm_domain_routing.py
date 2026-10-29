@@ -68,6 +68,63 @@ class RoutingTests(unittest.TestCase):
     def choose(self, question='Đăng ký khai sinh mất bao lâu và lệ phí bao nhiêu?', state=None, requested='auto', titles=None):
         return asyncio.run(self.router.choose_domain(question, state or {}, titles or [], requested))
 
+    def recovery_question(self):
+        return self.choose(question='Chuyển sang lĩnh vực khác: cần những gì?',
+            state={'name': 'administrative_procedures', 'allow_switching': True},
+            titles=['Đăng ký khai sinh'])
+
+    def test_contextual_none_retries_without_old_subject(self):
+        self.decisions = [{'route': 'none'}, {'route': 'university_admission'}]
+        config, state, changed = self.recovery_question()
+        self.assertEqual(config.name, 'university_admission')
+        self.assertTrue(changed)
+        self.assertTrue(state['allow_switching'])
+        self.assertEqual(state['selection'], 'auto')
+        self.assertEqual(len(self.requests), 2)
+        first, second = [json.loads(r['messages'][1]['content']) for r in self.requests]
+        self.assertIn('active_context', first)
+        self.assertNotIn('active_context', second)
+        self.assertFalse(second['followup_context_available'])
+        self.assertEqual(first['question'], second['question'])
+        self.assertEqual(first['domains'], second['domains'])
+
+    def test_recovery_stays_bounded_when_both_decisions_are_none(self):
+        self.decision = {'route': 'none'}
+        with self.assertRaises(self.router.DomainNoMatch):
+            self.recovery_question()
+        self.assertEqual(len(self.requests), 2)
+
+    def test_recovery_preserves_rejection_for_ambiguous_or_social_result(self):
+        for route in ('clarify', 'conversation'):
+            with self.subTest(route=route):
+                self.requests.clear()
+                self.decisions = [{'route': 'none'}, {'route': route}]
+                with self.assertRaises(self.router.DomainNoMatch):
+                    self.recovery_question()
+                self.assertEqual(len(self.requests), 2)
+
+    def test_recovery_same_domain_does_not_report_switch(self):
+        self.decisions = [{'route': 'none'}, {'route': 'administrative_procedures'}]
+        _, _, changed = self.recovery_question()
+        self.assertFalse(changed)
+
+    def test_none_without_old_subject_does_not_retry(self):
+        self.decision = {'route': 'none'}
+        with self.assertRaises(self.router.DomainNoMatch):
+            self.choose()
+        self.assertEqual(len(self.requests), 1)
+
+    def test_manual_and_locked_modes_do_not_enter_recovery(self):
+        self.decision = {'route': 'none'}
+        for state in (
+            {'name': 'administrative_procedures', 'selection': 'manual', 'allow_switching': True},
+            {'name': 'administrative_procedures', 'selection': 'auto', 'allow_switching': False},
+        ):
+            config, _, changed = self.choose(state=state, requested=None, titles=['Đăng ký khai sinh'])
+            self.assertEqual(config.name, 'administrative_procedures')
+            self.assertFalse(changed)
+        self.assertFalse(self.requests)
+
     def test_birth_registration_reaches_classifier_with_descriptions(self):
         config, _, _ = self.choose()
         self.assertEqual(config.name, 'administrative_procedures')

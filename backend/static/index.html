@@ -16,26 +16,25 @@
 .sources-details{border-top:1px solid #edf0e9;margin-top:18px;padding-top:12px;font-size:12px}.sources-details summary{cursor:pointer;color:#6b806d;user-select:none}.sources-content{margin-top:12px;background:#f6f8f3;padding:14px;border-radius:8px;max-height:250px;overflow:auto;white-space:pre-wrap;font-size:12px;color:#536950}.feedback-btns{display:flex;gap:6px;margin-top:9px;align-items:center}.feedback-btn{border:1px solid transparent;background:transparent;color:#819080;border-radius:7px;padding:6px 9px;font-size:11px}.feedback-btn:hover{background:#eaf0e5;color:#36583d}.feedback-btn.active-up{background:#e0eddf;color:#28673c;border-color:#b8d2b7}.feedback-btn.active-down{background:#f7e9e5;color:#9a4f42;border-color:#e9c7bd}.feedback-status{font-size:11px;color:var(--text-light)}.action-btns{display:flex;gap:8px;margin-top:13px}.action-btn{padding:8px 15px;border-radius:8px;border:0;font-size:12px}.action-btn.yes{background:var(--primary);color:white}.action-btn.no{background:#e9eee5;color:#546650}.diagnostics{font-size:11px;color:#7d8979;margin-top:12px}.diagnostics summary{cursor:pointer}.rag-score{padding:9px 0;color:#6f7c65;font-variant-numeric:tabular-nums}.error-text{color:#a44239}.notice{font-size:12px;color:#9b5642;padding:12px 0}
 #input-area{flex-shrink:0;padding:16px 30px 20px;background:linear-gradient(0deg,var(--bg-main) 85%,transparent)}.input-wrapper{display:flex;align-items:center;max-width:830px;width:100%;margin:auto;padding:6px 7px 6px 16px;border:1px solid #d6dfd1;background:white;border-radius:15px;box-shadow:0 5px 20px #29482408}.input-wrapper:focus-within{border-color:#8ca986;box-shadow:0 0 0 3px #176c6109}#prompt{flex:1;min-width:0;border:0;background:transparent;padding:13px 5px;color:var(--text-main);font-size:13px}#prompt:focus{outline:none}#prompt::placeholder{color:#96a08f}#mic-btn{height:37px;width:37px;border:0;background:transparent;border-radius:9px;color:#819176;font-size:17px;flex-shrink:0}#mic-btn:hover{background:#edf2e7}#mic-btn.listening{background:#f9dfda;animation:pulse 1s infinite}.send-btn{border:0;background:var(--primary);color:white;border-radius:10px;padding:11px 16px;margin-left:5px;font-size:12px;font-weight:600}.send-btn:hover{background:var(--primary-hover)}.composer-note{text-align:center;font-size:10px;color:#94a08e;margin:10px 0 0}
 #advanced-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:min(440px,100%);height:100%;max-height:100dvh;border:0;border-left:1px solid var(--border-color);padding:30px;background:#fafbf8;color:var(--text-main);box-shadow:-10px 0 50px #1a392510}#advanced-dialog::backdrop{background:#172e2640;backdrop-filter:blur(2px)}.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.panel-head h2{font-size:19px;margin:0}.panel-intro{font-size:12px;color:var(--text-light);line-height:1.8;margin-bottom:28px}.setting{margin:0 0 24px}.setting>label{display:block;font-size:12px;font-weight:600;margin-bottom:9px}.setting select{display:block;width:100%;padding:11px;border:1px solid #d6dfd1;border-radius:8px;background:white;color:var(--text-main)}.setting p{font-size:11px;line-height:1.8;color:var(--text-light);margin:9px 0}.setting-buttons{display:flex;gap:8px;margin-top:10px}.switch-label{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.7}.switch-label input{accent-color:var(--primary);margin-top:4px}#active-domain{display:block;font-size:11px;line-height:1.8;overflow-wrap:anywhere;padding:12px;background:#edf2e8;border-radius:8px;color:#627658}.setting-divider{border:0;border-top:1px solid var(--border-color);margin:26px 0}
-#login-overlay{position:fixed;inset:0;background:#f0f3edee;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}.login-box{width:390px;background:white;border:1px solid var(--border-color);border-radius:22px;padding:38px;box-shadow:0 20px 80px #26462c12}.login-box .brand-mark{margin-bottom:25px}.login-box h2{font-size:24px;letter-spacing:-.7px;margin:0 0 10px}.login-box p{font-size:12px;line-height:1.8;color:var(--text-light);margin:0 0 24px}.login-box label{display:block;font-size:12px;margin-bottom:8px}.login-box input{width:100%;padding:13px;border:1px solid var(--border-color);border-radius:9px;margin-bottom:14px}.login-box button{width:100%;padding:13px;border:0;border-radius:9px;background:var(--primary);color:white;font-weight:600}
 @media(min-width:1600px){#chat-window{padding-left:calc((100% - 900px)/2);padding-right:calc((100% - 900px)/2)}}
 @media(max-width:760px){#sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);transition:transform .2s;width:268px}body.sidebar-open #sidebar{transform:translateX(0)}.mobile-menu{display:inline-block}.topbar{height:72px;padding:0 16px;gap:10px}.topbar h1{font-size:14px}.topbar p{font-size:10px}.topbar-actions .quiet-btn{padding:8px;font-size:11px}#chat-window{padding:24px 16px}.message.bot{padding:18px}.message{font-size:13px}.empty-state h2{font-size:25px}.empty-state{min-height:85%}#input-area{padding:10px 12px 12px}.composer-note{font-size:9px}.send-btn{padding:11px 13px}}
 @media(prefers-reduced-motion:reduce){*,*::before{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
 </head>
 <body>
-<div id="login-overlay"><div class="login-box"><div class="brand-mark" aria-hidden="true">✳</div><h2>Chào bạn.</h2><p>Đăng nhập để bắt đầu tra cứu và tiếp tục những cuộc trò chuyện của bạn.</p><label for="username-input">Tên đăng nhập</label><input type="text" id="username-input" placeholder="Nhập tên của bạn" autocomplete="username" onkeydown="if(event.key==='Enter') performLogin()"><button onclick="performLogin()">Bắt đầu trò chuyện</button></div></div>
 <button id="sidebar-backdrop" aria-label="Đóng lịch sử" onclick="toggleSidebar(false)" hidden></button>
-<aside id="sidebar" aria-label="Lịch sử trò chuyện"><div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><div><strong>Trợ lý tra cứu</strong><small>Thông tin trong tầm tay</small></div></div><button class="new-chat-btn" onclick="startNewChat()"><span aria-hidden="true">+</span>Cuộc trò chuyện mới</button><div class="history-section"><p class="section-label">GẦN ĐÂY</p><div id="history-list"></div></div><div class="sidebar-footer"><span>Lịch sử của bạn</span><button class="logout-btn" onclick="logout()">Đăng xuất ↗</button></div></aside>
+<aside id="sidebar" aria-label="Lịch sử trò chuyện"><div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><div><strong>Trợ lý tra cứu</strong><small>Thông tin trong tầm tay</small></div></div><button class="new-chat-btn" onclick="startNewChat()"><span aria-hidden="true">+</span>Cuộc trò chuyện mới</button><div class="history-section"><p class="section-label">GẦN ĐÂY</p><div id="history-list"></div></div><div class="sidebar-footer"><span>Lịch sử của bạn</span><span title="Lịch sử được lưu cho trình duyệt này. Xóa cookie sẽ mất quyền truy cập lịch sử.">Trình duyệt này</span></div></aside>
 <main id="main"><header class="topbar"><div><h1>Không gian tra cứu</h1><p>Hỏi, khám phá và tìm thông tin bạn cần.</p></div><div class="topbar-actions"><button class="quiet-btn mobile-menu" onclick="toggleSidebar()" aria-label="Mở lịch sử">☰</button><button id="advanced-toggle" class="quiet-btn" onclick="openAdvanced()" aria-haspopup="dialog">⚙ Nâng cao</button></div></header><div id="chat-window" role="log" aria-label="Nội dung trò chuyện" aria-busy="false"></div><div id="input-area"><div class="input-wrapper"><input type="text" id="prompt" aria-label="Câu hỏi" placeholder="Bạn muốn tìm hiểu điều gì?" autocomplete="off" onkeydown="handleEnter(event)"><button id="mic-btn" title="Dùng giọng nói" aria-label="Dùng giọng nói">🎤</button><button id="send-btn" class="send-btn" onclick="sendMessage()">Gửi ↑</button></div><p class="composer-note">Thông tin có thể có sai sót. Hãy đối chiếu nguồn khi cần.</p></div></main>
 <dialog id="advanced-dialog" aria-labelledby="advanced-title"><div class="panel-head"><h2 id="advanced-title">Tùy chọn nâng cao</h2><button class="quiet-btn" onclick="closeAdvanced()" aria-label="Đóng tùy chọn nâng cao">✕</button></div><p class="panel-intro">Cấu hình tra cứu và thông tin kỹ thuật. Thay đổi áp dụng từ câu hỏi tiếp theo.</p><div class="setting"><label for="domain-select">Lĩnh vực tra cứu</label><select id="domain-select" onchange="updateRoutingControls()"><option value="auto">Tự động</option></select><div class="setting-buttons"><button class="quiet-btn" onclick="loadDomains()">Làm mới danh sách</button><button class="quiet-btn" onclick="resetDomainRouting()">Nhận diện lại</button></div><p>Nhận diện lại bỏ ngữ cảnh chủ đề cũ từ câu hỏi tiếp theo.</p></div><div class="setting"><label for="mode-select">Chế độ trả lời</label><select id="mode-select"><option value="">Mặc định của lĩnh vực</option><option value="strict">Strict · Bám sát dữ liệu</option><option value="friendly">Friendly · Thân thiện</option></select></div><div class="setting"><label class="switch-label"><input type="checkbox" id="allow-switching">Cho phép tự động chuyển lĩnh vực</label><p>Khi dùng Tự động, mặc định nhận diện một lần rồi giữ lĩnh vực. Bật để nhận diện lại khi đổi chủ đề. Chọn lĩnh vực cụ thể luôn giữ lựa chọn đó.</p></div><span id="active-domain">Chưa chọn lĩnh vực</span><hr class="setting-divider"><label class="switch-label"><input type="checkbox" id="show-diagnostics" onchange="updateDiagnostics()">Hiện chẩn đoán trong câu trả lời</label><p class="panel-intro">Hiện điểm truy xuất RAG trong mục thu gọn của từng câu trả lời. Đây không phải xác suất câu trả lời đúng.</p></dialog>
 <script>
-// API endpoints, routing preferences, action permissions and rating values retain the existing contracts.
+// Browser identity comes from an HttpOnly cookie; mutations carry the session CSRF token.
 if (window.marked) marked.use({
     gfm:true,breaks:true
 }
 );
-let currentConvId=null, resetDomainPending=false, userId=localStorage.getItem('user_id');
+let currentConvId=null, resetDomainPending=false, csrfToken='', sessionReady=false;
 let requestInFlight=false, creatingConversation=false, viewVersion=0;
 const mcpOffers={
 }
@@ -45,10 +44,10 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
 }
 [c]));
-const markdown=text=>window.marked?marked.parse(text||''):escapeHTML(text).replace(/\n/g,'<br>');
+const markdown=text=>window.marked&&window.DOMPurify?DOMPurify.sanitize(marked.parse(text||'')):escapeHTML(text).replace(/\n/g,'<br>');
 function getAuthHeaders(){
     return {
-        'Content-Type':'application/json','X-User-ID':userId
+        'Content-Type':'application/json','X-Session-CSRF':csrfToken
     }
     ;
 }
@@ -80,15 +79,26 @@ function suggestQuestion(button){
     $('prompt').value=button.textContent;
     $('prompt').focus();
 }
-window.onload=()=>{
+window.onload=async()=>{
     showEmpty();
-    loadDomains();
-    if(userId){
-        $('login-overlay').style.display='none';
-        loadSidebar();
+    $('send-btn').disabled=true;
+    document.querySelector('.new-chat-btn').disabled=true;
+    try{
+        const response=await fetch('/session',{credentials:'same-origin',cache:'no-store'});
+        if(!response.ok)throw Error('Session unavailable');
+        csrfToken=(await response.json()).csrf_token;
+        sessionReady=true;
+        const [,historyReady]=await Promise.all([loadDomains(),loadSidebar()]);
+        if(!historyReady)throw Error('Browser session unavailable');
+        $('send-btn').disabled=false;
+        document.querySelector('.new-chat-btn').disabled=false;
+    }catch(err){
+        const notice=document.createElement('p');
+        notice.className='notice';
+        notice.textContent='Không thể mở phiên trò chuyện. Vui lòng cho phép cookie và tải lại trang.';
+        $('chat-window').appendChild(notice);
     }
-}
-;
+};
 async function loadDomains(){
     try{
         const res=await fetch('/domains');
@@ -126,36 +136,6 @@ function resetDomainRouting(){
     updateRoutingControls();
     $('active-domain').textContent='Sẽ nhận diện lại từ câu hỏi tiếp theo';
 }
-async function performLogin(){
-    const username=$('username-input').value.trim();
-    if(!username)return alert('Vui lòng nhập tên đăng nhập!');
-    try{
-        const res=await fetch('/mock-login',{
-            method:'POST',headers:{
-                'Content-Type':'application/json'
-            }
-            ,body:JSON.stringify({
-                username
-            }
-            )
-        }
-        );
-        if(!res.ok)throw Error();
-        const data=await res.json();
-        userId=data.user_id;
-        localStorage.setItem('user_id',userId);
-        $('login-overlay').style.display='none';
-        loadSidebar();
-        $('prompt').focus();
-    }
-    catch(err){
-        alert('Lỗi đăng nhập. Vui lòng thử lại.');
-    }
-}
-function logout(){
-    localStorage.removeItem('user_id');
-    window.location.reload();
-}
 function handleEnter(event){
     if(event.key==='Enter'&&!event.isComposing){
         event.preventDefault();
@@ -168,13 +148,13 @@ function setBusy(busy){
     $('chat-window').setAttribute('aria-busy',String(busy));
 }
 async function loadSidebar(){
-    if(!userId)return;
+    if(!sessionReady)return false;
     try{
         const res=await fetch('/conversations',{
             headers:getAuthHeaders()
         }
         );
-        if(!res.ok)return;
+        if(!res.ok)return false;
         const data=await res.json();
         $('history-list').replaceChildren();
         data.forEach(conv=>{
@@ -187,13 +167,15 @@ async function loadSidebar(){
             $('history-list').appendChild(button);
         }
         );
+        return true;
     }
     catch(err){
         console.warn('Could not load conversations',err);
+        return false;
     }
 }
 async function startNewChat(){
-    if(creatingConversation)return;
+    if(!sessionReady||creatingConversation)return;
     creatingConversation=true;
     try{
         const res=await fetch('/start-conversation',{
@@ -482,7 +464,7 @@ async function triggerAction(key,type){
 }
 async function sendMessage(){
     const text=$('prompt').value.trim();
-    if(!text||requestInFlight||creatingConversation)return;
+    if(!sessionReady||!text||requestInFlight||creatingConversation)return;
     setBusy(true);
     let reply,renderFrame=null,fullText='',sources=[],key,offered=false,doneReceived=false;
     const convId=currentConvId||await startNewChat();
@@ -540,7 +522,10 @@ async function sendMessage(){
             method:'POST',headers:getAuthHeaders(),body:JSON.stringify(payload)
         }
         );
-        if(!res.ok)throw Error('HTTP '+res.status);
+        if(!res.ok){
+            const failure=await res.json().catch(()=>({}));
+            throw Error(typeof failure.detail==='string'?failure.detail:(res.status===429?'Bạn gửi câu hỏi quá nhanh. Vui lòng chờ một lát rồi thử lại.':([502,503,504].includes(res.status)?'Dịch vụ tạm thời chưa sẵn sàng. Vui lòng thử lại sau.':'Không thể xử lý yêu cầu. Vui lòng thử lại.')));
+        }
         const reader=res.body.getReader(),decoder=new TextDecoder('utf-8');
         let buffer='';
         function drain(){
@@ -581,7 +566,7 @@ async function sendMessage(){
         else reply.content.textContent='';
         const error=document.createElement('p');
         error.className='error-text';
-        error.textContent='Kết nối bị gián đoạn. Vui lòng kiểm tra lịch sử trước khi gửi lại.';
+        error.textContent=err.message==='Incomplete stream'?'Kết nối bị gián đoạn. Vui lòng kiểm tra lịch sử trước khi gửi lại.':(err.message||'Không thể gửi câu hỏi. Vui lòng thử lại.');
         reply.content.appendChild(error);
         console.warn('Chat request failed',err);
     }
