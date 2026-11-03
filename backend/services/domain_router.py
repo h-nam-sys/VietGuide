@@ -1,4 +1,5 @@
 """Sticky, domain-isolated routing. Explicit domain selection bypasses the LLM."""
+from rag.service_config import model_http_timeout
 import json
 import logging
 import re
@@ -312,7 +313,7 @@ async def choose_domain(prompt, state, active_titles, requested=None, allow_swit
         stage = 'http_request'
         conflict = None
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=model_http_timeout(30)) as client:
                 with span('backend.services.domain_router.http_or_mcp_call'):
                     response = await client.post(f'{llm_url()}/v1/chat/completions', json=payload, headers=trace_headers())
                 # Capture even a non-JSON/error response before validation. No request headers are logged.

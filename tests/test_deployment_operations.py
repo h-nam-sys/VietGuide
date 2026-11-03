@@ -165,9 +165,14 @@ def test_asset_readiness_no_model_construction(tmp_path,monkeypatch):
     assert all(model_assets(tmp_path).values())
     fake=NS(__version__='test',get_available_providers=lambda:['CPUExecutionProvider'])
     monkeypatch.setitem(sys.modules,'onnxruntime',fake)
-    assert not model_assets(tmp_path,check_runtime=True)['retrieval_assets']
+    assert model_assets(tmp_path,check_runtime=True)['retrieval_assets']
     fake.get_available_providers=lambda:['DmlExecutionProvider']
     assert model_assets(tmp_path,check_runtime=True)['retrieval_assets']
+    fake.get_available_providers=lambda:[]
+    assert not model_assets(tmp_path,check_runtime=True)['retrieval_assets']
+    fake.get_available_providers=lambda:['CPUExecutionProvider']
+    fake.__version__='different'
+    assert not model_assets(tmp_path,check_runtime=True)['retrieval_assets']
 
 
 def test_readiness_checks_dependencies_without_inference(tmp_path,monkeypatch):

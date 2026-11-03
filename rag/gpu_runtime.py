@@ -1,4 +1,4 @@
-"""DirectML inference for the existing BGE models; no CPU model fallback."""
+"""Existing DirectML inference with CPU fallback on session initialization failure."""
 import json
 import os
 from pathlib import Path
@@ -38,15 +38,13 @@ def read_active():
             raise ValueError('ONNX Runtime changed; repeat local GPU validation')
         return directory, meta
     except Exception as exc:
-        raise RAGUnavailableError('DirectML models are not prepared/validated. Run python -m rag.prepare_gpu --export, then --validate; CPU fallback is disabled.') from exc
+        raise RAGUnavailableError('Retrieval assets are not prepared/validated. Run python -m rag.prepare_gpu --export, then --validate.') from exc
 
 
 def make_session(path, *, device_id=0, profile=False, precision='fp32'):
     import onnxruntime as ort
     if precision not in ('fp32', 'fp16'):
         raise ValueError('Unsupported GPU precision')
-    if 'DmlExecutionProvider' not in ort.get_available_providers():
-        raise RAGUnavailableError('DmlExecutionProvider is unavailable. Install requirements-gpu.txt into this Python environment. CPU fallback is disabled.')
     if device_id < 0:
         raise ValueError('DirectML device_id must be nonnegative')
     options = ort.SessionOptions()
@@ -58,15 +56,35 @@ def make_session(path, *, device_id=0, profile=False, precision='fp32'):
         prefix = ROOT_DIR / 'logs' / 'gpu_profiles'
         prefix.mkdir(parents=True, exist_ok=True)
         options.profile_file_prefix = str(prefix / path.parent.name)
-    with memory_stage('rag.directml.session_load', model=path.parent.name, precision=precision), span('rag.directml.session_load'):
-        session = ort.InferenceSession(str(path), sess_options=options,
-            providers=[('DmlExecutionProvider', {'device_id': str(device_id)})])
-    session.disable_fallback()  # Disable Python's EP-failure retry on CPU.
-    if not session.get_providers() or session.get_providers()[0] != 'DmlExecutionProvider':
-        raise RAGUnavailableError('ONNX Runtime did not activate DirectML; refusing CPU-only inference.')
-    emit('rag.directml', 'session_ready', model=path.parent.name, device_id=device_id,
-         providers=session.get_providers(), precision=precision, cpu_model_fallback=False)
-    return session
+    from .inference_fallback import initialize
+
+    def create(provider):
+        session = None
+        try:
+            if provider not in ort.get_available_providers():
+                raise RAGUnavailableError(provider + ' is unavailable')
+            providers = ([('DmlExecutionProvider', {'device_id': str(device_id)})]
+                         if provider == 'DmlExecutionProvider' else ['CPUExecutionProvider'])
+            with memory_stage('rag.directml.session_load', model=path.parent.name,
+                              precision=precision), span('rag.directml.session_load'):
+                session = ort.InferenceSession(str(path), sess_options=options, providers=providers)
+            session.disable_fallback()
+            if not session.get_providers() or session.get_providers()[0] != provider:
+                raise RAGUnavailableError('ONNX Runtime did not activate ' + provider)
+            emit('rag.directml', 'session_ready', model=path.parent.name, device_id=device_id,
+                 providers=session.get_providers(), precision=precision,
+                 cpu_model_fallback=provider == 'CPUExecutionProvider')
+            return session
+        except Exception:
+            # Drop any silently substituted session before a CPU retry.
+            del session
+            raise
+
+    # Profiling is used for export validation: it must still prove DirectML works,
+    # never publish a supposedly GPU-validated export using a CPU fallback.
+    return initialize(lambda: create('DmlExecutionProvider'),
+                      lambda: create('CPUExecutionProvider'),
+                      component=path.parent.name, gpu_path='DirectML', strict=profile)
 
 
 def numpy_feed(session, encoded):
@@ -175,7 +193,7 @@ class LocalDirectMLReranker:
 
 def embedding_model(model_name):
     if model_name != EMBED_MODEL:
-        raise RAGUnavailableError(f'No validated DirectML export for {model_name}. CPU fallback is disabled.')
+        raise RAGUnavailableError(f'No validated export for {model_name}.')
     from .gpu_client import RemoteDirectMLEmbedding
     return RemoteDirectMLEmbedding()
 

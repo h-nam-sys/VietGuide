@@ -35,7 +35,8 @@ TOKENIZER_NAME = os.getenv("TOKENIZER_NAME", "Qwen/Qwen3-0.6B")
 with memory_stage('llm.tokenizer_load'), span('llm.tokenizer_load'):
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
 with memory_stage('llm.model_load'), span('llm.model_load'), NativeStartupLog(llama_api):
-    llm = Llama(model_path=str(MODEL_PATH), n_ctx=4096, n_threads=8, n_gpu_layers=-1, verbose=True)
+    from rag.inference_fallback import load_llama
+    llm = load_llama(Llama, MODEL_PATH)
 # Verbosity changes only during startup; retain the original inference verbosity.
 finish_llama_startup(llm)
 llama_runtime(llama_api)
@@ -133,7 +134,8 @@ def health():
 @app.get('/v1/rag/status')
 def gpu_status():
     from rag.deployment_config import model_assets
-    return {'gpu_protocol': 1, 'qwen_ready': True,
+    from rag.inference_fallback import startup_status
+    return {'gpu_protocol': 1, 'qwen_ready': True, 'inference_startup': startup_status(),
             'retrieval_assets_ready': model_assets(ROOT_DIR, check_runtime=True)['retrieval_assets'],
             'embedding_loaded': bool(_gpu_embedding.cache_info().currsize),
             'reranker_loaded': bool(_gpu_reranker.cache_info().currsize),
@@ -151,7 +153,7 @@ def gpu_embeddings(payload: GPUEmbeddingRequest):
         return {'embeddings': values}
     except Exception as exc:
         emit('llm.rag.embeddings', 'failure', error=type(exc).__name__, error_message=str(exc)[:500])
-        raise HTTPException(503, 'DirectML embedding unavailable; inspect LLM timing logs. CPU fallback is disabled.') from exc
+        raise HTTPException(503, 'Embedding initialization/inference unavailable; inspect LLM timing logs.') from exc
 
 
 @app.post('/v1/rag/rerank')
@@ -163,7 +165,7 @@ def gpu_rerank(payload: GPURerankRequest):
         return {'logits': values}
     except Exception as exc:
         emit('llm.rag.rerank', 'failure', error=type(exc).__name__, error_message=str(exc)[:500])
-        raise HTTPException(503, 'DirectML reranker unavailable; inspect LLM timing logs. CPU fallback is disabled.') from exc
+        raise HTTPException(503, 'Reranker initialization/inference unavailable; inspect LLM timing logs.') from exc
 
 
 @app.get('/v1/operations')

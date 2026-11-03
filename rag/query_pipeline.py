@@ -1,4 +1,5 @@
 """Keep the backend evidence tuple while using one consistent domain snapshot."""
+from rag.service_config import model_http_timeout
 import asyncio
 import json
 import logging
@@ -32,7 +33,7 @@ async def call_llm_json(prompt, *, system="Chọn trường dữ liệu. Chỉ t
     }
     emit('rag.json_call.diagnostic', 'request', payload=payload)
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=model_http_timeout(30)) as client:
             with span('rag.query_pipeline.http_or_mcp_call'):
                 response = await client.post(f"{llm_url()}/v1/chat/completions", json=payload, headers=trace_headers())
             emit('rag.json_call.diagnostic', 'raw_response', status_code=getattr(response, 'status_code', None),

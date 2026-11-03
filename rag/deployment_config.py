@@ -27,7 +27,7 @@ def model_assets(root, check_runtime=False):
     if check_runtime and result['retrieval_assets']:
         try:
             import onnxruntime as ort
-            result['retrieval_assets'] = ('DmlExecutionProvider' in ort.get_available_providers()
+            result['retrieval_assets'] = (bool({'DmlExecutionProvider', 'CPUExecutionProvider'} & set(ort.get_available_providers()))
                 and metadata.get('onnxruntime_version') == ort.__version__)
         except Exception:
             result['retrieval_assets'] = False
@@ -43,7 +43,7 @@ def database_path(root):
     return path if path.is_absolute() else Path(root)/'backend'/path
 
 
-def validate(root, production=False):
+def validate(root, production=False, *, include_inference=True, include_web=True):
     from .service_config import llm_port, llm_url
     from .request_capacity import RequestCapacityMiddleware
     from .operations import RequestBodyLimitMiddleware
@@ -78,9 +78,14 @@ def validate(root, production=False):
             errors.append('Set PUBLIC_HOST when using CADDY_BINARY')
         if not shutil.which(os.environ['CADDY_BINARY']):
             errors.append('CADDY_BINARY was not found')
-    assets = model_assets(root)
+    assets = model_assets(root) if include_inference else {}
     errors.extend(name + ' is missing/unvalidated' for name, valid in assets.items() if not valid)
-    for module in ('fastapi','uvicorn','streamlit','sqlalchemy','aiosqlite','httpx','llama_cpp','transformers','onnxruntime','psutil'):
+    modules = ['fastapi','uvicorn','httpx','psutil']
+    if include_web:
+        modules += ['streamlit','sqlalchemy','aiosqlite']
+    if include_inference:
+        modules += ['llama_cpp','transformers','onnxruntime']
+    for module in modules:
         if importlib.util.find_spec(module) is None:
             errors.append('Missing Python dependency: ' + module)
     if os.getenv('PUBLIC_HOST'):

@@ -2,6 +2,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import User, Conversation, Message, AuditLog
 import json
+import os
+from pathlib import Path
 from datetime import datetime
 
 # ============ User Operations ============
@@ -224,12 +226,12 @@ async def update_message_rating(db: AsyncSession, message_id: int, rating: int):
                 "rag_context": clean_sources
             }
 
-            with open("all_feedback_dataset.jsonl", "a", encoding="utf-8") as f:
+            with open(Path(os.getenv("FEEDBACK_DIR", ".")) / "all_feedback_dataset.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
             if rating == 1:
-                with open("sft_positive_dataset.jsonl", "a", encoding="utf-8") as f:
+                with open(Path(os.getenv("FEEDBACK_DIR", ".")) / "sft_positive_dataset.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             elif rating == 0:
-                with open("review_negative_dataset.jsonl", "a", encoding="utf-8") as f:
+                with open(Path(os.getenv("FEEDBACK_DIR", ".")) / "review_negative_dataset.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + "\n")

@@ -1,3 +1,4 @@
+from rag.service_config import model_http_timeout
 import asyncio
 import json
 import logging
@@ -216,7 +217,7 @@ async def get_legal_response_stream(prompt, search_query, domain=None, *, active
         chunks = []
         complete = False
         try:
-            async with httpx.AsyncClient(timeout=300) as client:
+            async with httpx.AsyncClient(timeout=model_http_timeout(300)) as client:
                 async with client.stream("POST", f"{url}/v1/chat/completions", json=payload, headers=trace_headers()) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
@@ -271,7 +272,7 @@ async def get_friendly_response_stream(prompt, history, config=None):
     yield event({"type": "metadata", "sources": []})
     complete = False
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with httpx.AsyncClient(timeout=model_http_timeout(300)) as client:
             async with client.stream("POST", f"{llm_url()}/v1/chat/completions", json={
                 'messages': messages, 'stream': True, 'max_tokens': settings.get('max_tokens', 800),
                 'temperature': settings.get('temperature', 0.3), 'top_p': settings.get('top_p', 0.95),

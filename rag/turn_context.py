@@ -1,4 +1,5 @@
 """Resolve references independently of domain routing; never rewrite user facts."""
+from rag.service_config import model_http_timeout
 import json
 
 import httpx
@@ -46,7 +47,7 @@ async def resolve_references(question, active_titles, config):
     task = 'rag.reference.diagnostic'
     emit(task,'request',domain=config.name,payload=payload)
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=model_http_timeout(30)) as client:
             response = await client.post(llm_url()+'/v1/chat/completions',json=payload,headers=trace_headers())
             response.raise_for_status()
             data = response.json()

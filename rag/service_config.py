@@ -20,3 +20,14 @@ def llm_url():
     if value is None:
         value=f'http://127.0.0.1:{llm_port()}'
     return value.split(',')[0].strip().rstrip('/')
+
+
+def model_http_timeout(default=30):
+    """Optional slower-runtime allowance; native call-site defaults stay intact."""
+    try:
+        value = float(os.getenv('MODEL_HTTP_TIMEOUT', str(default)))
+    except ValueError as exc:
+        raise ValueError('MODEL_HTTP_TIMEOUT must be between 1 and 1800 seconds') from exc
+    if not 1 <= value <= 1800:
+        raise ValueError('MODEL_HTTP_TIMEOUT must be between 1 and 1800 seconds')
+    return value

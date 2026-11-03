@@ -94,20 +94,20 @@ def stop_process(process):
                 pass
 
 
-def service_definitions(production=None):
+def service_definitions(production=None, *, web_only=False):
     if production is None:
         production = os.getenv('APP_ENV', 'development') == 'production'
     inference_port=llm_port()
-    backend = [sys.executable, '-u', '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000']
+    backend = [sys.executable, '-u', '-m', 'uvicorn', 'main:app', '--host', os.getenv('BACKEND_BIND_HOST', '127.0.0.1'), '--port', '8000']
     backend += ['--proxy-headers', '--forwarded-allow-ips', '127.0.0.1,::1'] if production else ['--reload']
     services = [
         ('LLM', ROOT, [sys.executable, '-u', 'llm_service/main.py'], inference_port, '/v1/rag/status'),
         ('Backend', ROOT / 'backend', backend, 8000, '/health'),
-        ('Admin', ROOT / 'backend', [sys.executable, '-u', '-m', 'streamlit', 'run', 'admin_dashboard.py', '--server.address', '127.0.0.1', '--server.port', '8501'], 8501, '/_stcore/health'),
+        ('Admin', ROOT / 'backend', [sys.executable, '-u', '-m', 'streamlit', 'run', 'admin_dashboard.py', '--server.address', os.getenv('ADMIN_BIND_HOST', '127.0.0.1'), '--server.port', '8501'], 8501, '/_stcore/health'),
     ]
     if production and os.getenv('CADDY_BINARY'):
         services.append(('Proxy',ROOT,[os.environ['CADDY_BINARY'],'run','--config',str(ROOT/'deployment/Caddyfile'),'--adapter','caddyfile'],443,'http://127.0.0.1:2019/config/'))
-    return services
+    return [s for s in services if s[0] != 'LLM'] if web_only else services
 
 
 def healthy(port, path='/health'):
@@ -140,14 +140,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--production', action='store_true')
     parser.add_argument('--development', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--docker', action='store_true', help='Windows inference plus Docker backend/admin')
+    mode.add_argument('--web-only', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     production = not args.development and (args.production or os.getenv('APP_ENV') == 'production')
     from rag.process_lock import process_lock
     from rag.operations import alert
     from rag.deployment_config import validate
     STOP.clear()
-    if production:
-        report = validate(ROOT, True)
+    if production or args.docker:
+        report = validate(ROOT, True, include_inference=not args.web_only, include_web=not args.docker)
         for warning in report['warnings']:
             show('Config', 'WARNING: ' + warning)
         if not report['ok']:
@@ -156,6 +159,11 @@ def main(argv=None):
             return 1
     try:
         with process_lock(ROOT/'data/ops_locks/services.lock'):
+            if args.docker:
+                from deployment.container.hybrid import run_hybrid
+                return run_hybrid(sys.modules[__name__], alert)
+            if args.web_only:
+                return run_group(production, alert, definitions=service_definitions(production, web_only=True))
             return run_group(production, alert)
     except TimeoutError:
         show('Services', 'ERROR: another launcher or maintenance operation is active.')
@@ -165,8 +173,8 @@ def main(argv=None):
         return 1
 
 
-def run_group(production, alert):
-    services = service_definitions(production)
+def run_group(production, alert, *, definitions=None, environment_overrides=None):
+    services = service_definitions(production) if definitions is None else definitions
     for name, _, _, port, _ in services:
         with socket.socket() as probe:
             probe.settimeout(0.5)
@@ -193,6 +201,7 @@ def run_group(production, alert):
     def launch(definition):
         name, cwd, command, port, health = definition
         environment = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')
+        environment.update(environment_overrides or {})
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         process = subprocess.Popen(command, cwd=cwd, env=environment,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -260,4 +269,5 @@ def run_group(production, alert):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, lambda *_: STOP.set())
     raise SystemExit(main())

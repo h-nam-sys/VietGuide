@@ -1,0 +1,8 @@
+# Reuse the already-built runtime; this update does not compile inference again.
+FROM legal-llm:docker-v1
+WORKDIR /app
+COPY backend ./backend
+COPY rag ./rag
+COPY run_services.py qa_suite.py ./
+COPY deployment/manage.py ./deployment/manage.py
+COPY deployment/container ./deployment/container

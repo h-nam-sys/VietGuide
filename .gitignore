@@ -11,3 +11,7 @@ data/session_secret.key
 
 backups/
 deployment/runtime_dependencies.local.json
+
+# Generated Docker build pins (no secrets; regenerate on the target project).
+deployment/container/constraints.generated.txt
+deployment/container/llama.generated.txt

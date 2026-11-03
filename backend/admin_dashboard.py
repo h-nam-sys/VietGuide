@@ -16,8 +16,8 @@ load_dotenv(PROJECT_ROOT / 'backend/.env')
 load_dotenv(PROJECT_ROOT / '.env')
 
 # --- CONFIG ---
-DB_PATH = "./legal_llm.db"
-FEEDBACK_FILE = "./all_feedback_dataset.jsonl"
+DB_PATH = os.getenv("CHAT_DB_PATH", "./legal_llm.db")
+FEEDBACK_FILE = str(Path(os.getenv("FEEDBACK_DIR", ".")) / "all_feedback_dataset.jsonl")
 API_URL = "http://localhost:8000" # Update this if your FastAPI runs on a different port/host
 
 st.set_page_config(page_title="Bảng quản trị", layout="wide")

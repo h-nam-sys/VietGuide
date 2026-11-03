@@ -1,0 +1,78 @@
+name: legal-llm
+services:
+  app:
+    image: legal-llm:docker-v1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      BACKEND_BIND_HOST: 0.0.0.0
+      ADMIN_BIND_HOST: 0.0.0.0
+      LLM_BIND_HOST: 127.0.0.1
+      LLM_PORT: "8001"
+      LLM_SERVICE_URLS: http://127.0.0.1:8001
+      RAG_SERVICE_URL: http://127.0.0.1:8001
+      MODEL_PATH: /app/models/qwen3.5_4b.gguf
+      RAG_GPU_MODEL_DIR: /app/models/rag_directml
+      DATABASE_URL: sqlite+aiosqlite:////app/data/docker_runtime/legal_llm.db
+      CHAT_DB_PATH: /app/data/docker_runtime/legal_llm.db
+      FEEDBACK_DIR: /app/data/docker_runtime
+      INFERENCE_DEVICE: ${INFERENCE_DEVICE:-auto}
+      MODEL_HTTP_TIMEOUT: ${MODEL_HTTP_TIMEOUT:-600}
+      GPU_SERVICE_TIMEOUT: ${GPU_SERVICE_TIMEOUT:-600}
+      SERVICE_STARTUP_GRACE: "1800"
+      # Public HTTPS is a later deployment step, not part of this localhost test.
+      CADDY_BINARY: ""
+      PUBLIC_HOST: ""
+      SESSION_COOKIE_SECURE: auto
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - type: bind
+        source: ./models
+        target: /app/models
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data
+        target: /seed/data
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./backend
+        target: /seed/backend
+        read_only: true
+        bind:
+          create_host_path: false
+      - app-data:/app/data
+      - app-forms:/app/backend/static/forms
+      - app-logs:/app/logs
+      - model-cache:/cache/huggingface
+      - app-backups:/app/backups
+    healthcheck:
+      test: ["CMD", "python", "/app/deployment/container/healthcheck.py"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30m
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app-data:
+  app-forms:
+  app-logs:
+  model-cache:
+  app-backups:

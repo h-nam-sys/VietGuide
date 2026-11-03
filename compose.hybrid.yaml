@@ -1,0 +1,11 @@
+# Windows GPU inference remains on the host; no model is started in this container.
+services:
+  app:
+    image: legal-llm:hybrid-v1
+    build:
+      dockerfile: Dockerfile.hybrid
+    command: ["--web-only"]
+    environment:
+      LLM_SERVICE_URLS: http://host.docker.internal:${HYBRID_LLM_PORT:-8001}
+      RAG_SERVICE_URL: http://host.docker.internal:${HYBRID_LLM_PORT:-8001}
+      NO_PROXY: localhost,127.0.0.1,host.docker.internal
