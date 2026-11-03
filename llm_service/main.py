@@ -114,9 +114,9 @@ class GPURerankRequest(BaseModel):
 
 @lru_cache(maxsize=1)
 def _gpu_embedding():
-    from rag.gpu_embedding import LocalDirectMLEmbedding
+    from rag.inference_embedding import LocalInferenceEmbedding
     with memory_stage('llm.rag.embedding_load'):
-        return LocalDirectMLEmbedding()
+        return LocalInferenceEmbedding()
 
 
 @lru_cache(maxsize=1)

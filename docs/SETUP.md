@@ -1,100 +1,112 @@
-# Setup guide
+# Setup
 
-## Environment
+## Runtime assets
 
-The current local configuration targets Windows and Python 3.12. Qwen uses Vulkan; embedding and reranking use DirectML. Model downloads and package installation require network access. Local inference uses the downloaded files.
+The source archive does not contain model weights, private datasets or secrets.
+The standard layout is:
 
-Follow the installation and `.env` steps in the [README](../README.md). Keep a working existing environment rather than reinstalling it unnecessarily. To record that environment’s installed package versions:
+- `models/qwen3.5_4b.gguf`: Qwen3.5-4B IQ4_XS from
+  [bartowski's GGUF repository](https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF).
+- `models/rag_directml/`: BGE ONNX exports, tokenizer files and `current.json`
+  pointing to a generation with `validated.json`.
+- `data/`: domain profiles, SQL records, vector indexes and runtime settings.
+- `backend/static/forms/`: configured form files, when used.
 
-```bat
-python -m pip freeze > requirements-review-lock.txt
+Prepared retrieval assets must match the ONNX Runtime version recorded in their
+validation manifest. Hardware/device compatibility must be checked on a new
+machine. Export and formal validation tools belong to the full source environment.
+They are not included in the smaller hybrid runtime requirements.
+
+## Hybrid installation
+
+Install Python 3.12 with the Windows Python launcher and Docker Desktop using
+Linux containers. Place the runtime assets in the project, create `.env` from
+`.env.example`, and set the admin password. Then run:
+
+```powershell
+.\start_all_services.bat --docker
 ```
 
-The shared model service listens on port 8001 by default. Backend and admin use 8000 and 8501. Stop old project processes before starting another instance.
+For a missing `env`, the BAT invokes the first-run inference installer. It pins
+DirectML's ONNX Runtime version to the prepared manifest, installs
+`requirements-inference.txt` and checks dependency consistency. An interrupted
+installation is retried on the next launch. Existing working environments are
+not reinstalled or upgraded.
 
-## GPU retrieval models
+The Windows environment contains the model HTTP service, tokenizers, ONNX runtime
+and compatibility dependencies. FlagEmbedding is retained for the existing
+reranker tokenizer compatibility path; its dependencies include PyTorch. Streamlit,
+LlamaIndex and backend database packages are supplied by the Docker image instead.
 
-Skip preparation if `models/rag_directml/` already contains artifacts validated for the installed ONNX Runtime.
+The launcher prepares/builds the base image if missing, applies the web source
+layer, starts native inference and checks it from a temporary container before
+starting backend/admin. No separate inference command is required.
 
-For a new setup, activate `env` and export before starting the services:
+## Full source installation
+
+In Command Prompt:
+
+```bat
+py -3.12 -m venv env
+env\Scripts\activate.bat
+python -m pip install -r requirements.txt
+```
+
+For a fresh model setup, export the BGE models:
 
 ```bat
 python -m rag.prepare_gpu --export
 ```
 
-Start the normal launcher:
+In that environment, start the model service directly:
+
+```bat
+python llm_service/main.py
+```
+
+Leave it running without sending chat/embedding requests. In another activated
+terminal at the project root, validate the pending exports:
+
+```bat
+python -m rag.prepare_gpu --validate
+```
+
+Validation requires Qwen to be loaded, checks outputs and activates the completed
+export generation. `--device-id` selects the DirectML adapter. An optional
+`--precision fp16` can be supplied during export; changing export precision needs
+new validation. Stop the temporary model service, then start normally:
 
 ```bat
 start_all_services.bat
 ```
 
-Wait for Qwen to be ready. In another terminal, activate the same environment and validate:
+For an installation without ingested data, open admin at localhost:8501 and import
+the first dataset. `/readyz` and automatic chat opening require an available dataset.
+Gemini proposals require `GEMINI_API_KEY`; a reviewed JSON profile can be imported
+instead. Dataset updates replace the selected domain's active data after a
+successful build. The previous generation remains available for rollback.
 
-```bat
-env\Scripts\activate.bat
-python -m rag.prepare_gpu --validate
-```
+## Environment and storage
 
-Complete validation before ingestion or dataset chat. The current retrieval runtime has CPU model fallback disabled. A responding `/v1/rag/status` endpoint alone does not prove both retrieval models can load; validate them and try a dataset question.
+Admin edits apply through saved domain settings. `.env` changes require restarting
+services. Per-domain and per-mode values can override environment defaults.
+`RAG_LOW_SCORE_RECOVERY=0` is the selected release setting; omitting it enables
+the code's fallback default.
 
-Model files require more runtime memory than their download sizes suggest. If reranker loading fails with a memory allocation error, inspect available RAM/GPU memory, close unnecessary applications and check for duplicate project processes.
+Native conversations use `backend/legal_llm.db`. Hybrid mode imports native
+runtime data once into Docker volumes. Later edits are not synchronized between
+the two stores. Preserve the session signing key with its conversation database.
+Never distribute private histories, `.env` files or signing keys as demo assets.
 
-## Add data
+## Troubleshooting
 
-Existing ingested datasets can be used directly. On a new machine, obtain the permitted source files and profiles, or the corresponding databases and vector generations.
-
-1. Open <http://localhost:8501> and go to dataset management.
-2. Upload `.xlsx`, `.xlsm`, `.csv`, `.tsv`, `.json` or `.jsonl` data.
-3. Select an existing domain or create one. Review field mappings, the primary entity, embedding fields, excluded fields and source-ID configuration.
-4. Run ingestion and inspect its progress and active generation.
-5. Ask a question with a known answer and inspect the returned source.
-
-JSON data must be flat row objects: an array for JSON or one object per line for JSONL. Reingesting an existing domain replaces its active dataset after successful publication. Retain generations and active pointers for rollback.
-
-For a reviewed JSON profile, the CLI supports validation before ingestion. Replace these example paths and domain ID:
-
-```bat
-python -m rag.ingest_pipeline --domain YOUR_DOMAIN --input "path\dataset.xlsx" --profile-file "path\profile.json" --dry-run
-python -m rag.ingest_pipeline --domain YOUR_DOMAIN --input "path\dataset.xlsx" --profile-file "path\profile.json"
-```
-
-## Optional configuration
-
-| Setting | Purpose |
-|---|---|
-| `LLM_PORT` | Model-service listening port; default `8001` |
-| `LLM_SERVICE_URLS` | Model-service URL used by clients; keep it aligned with the listener |
-| `RAG_CONTEXT_MODE` | Defaults to `full`; `selected` is also supported |
-| `RAG_CANDIDATE_K` / `RAG_RESULT_K` | Retrieval candidate/result settings, subject to domain configuration |
-| `GEMINI_API_KEY` | Gemini-assisted profile proposals and applicable optional integrations |
-| `DOMAIN_PROFILE_MODEL` | Profile-proposal model; source default `gemini-2.5-flash` |
-| `TOKENIZER_NAME` | Prompt-formatting tokenizer; source default `Qwen/Qwen3-0.6B` |
-
-The tokenizer identifier is separate from the Qwen3.5-4B generation model. Validate template compatibility when changing models or tokenizer configuration. Both root `.env` and `backend/.env` are read by the launcher/model service; avoid conflicting settings.
-
-External search additionally requires MCP configuration. Keep keys private and out of Git. Local dataset inference does not require enabling external search.
-
-## Files and diagnostics
-
-| Location | Contents |
-|---|---|
-| `backend/` | API, browser interface, admin and conversation handling |
-| `llm_service/` | Shared model service |
-| `rag/` | Profiles, ingestion, retrieval and runtime helpers |
-| `data/` | Dataset profiles, generations and active pointers |
-| `models/` | GGUF and DirectML artifacts |
-| `testing/` / `tests/` | Live regression runner / developer checks |
-| `logs/services/<run>/` | Backend, LLM and admin output |
-| `logs/timing/` / `logs/conversations/` | Request diagnostics and conversation records |
-
-Model weights are excluded from Git. Source exports may also omit databases, indexes and the test assets. Keep the actual test launcher and fixtures in the development repository, and document how permitted runtime data is obtained.
-
-The browser login is a demonstration identifier flow. It does not provide production authentication. Administrative/admissions answers reflect the loaded dataset; the application does not independently verify whether those policies are current.
-
-## Applying the complete source bundle
-
-Merge the source into the existing project. This bundle intentionally omits runtime assets and active dataset metadata: preserve `data/`, `models/`, `env/`, `.env`, `backend/.env`, the configured conversation database (default `legal_llm.db`), `backend/static/forms/`, raw source files and the existing Git repository. It does not contain a replacement for those files.
-
-For a fresh administrative-domain setup, `config_examples/administrative_domain_profile.json` contains the supplied schema mapping. It is an example, not an active generation or an ingested dataset. Review/use it during ingestion; do not overwrite an existing domain's configuration with it.
-
-Answer guidance and full context are enabled by default in the selected code. If a previous local ablation explicitly set `RAG_ANSWER_GUIDANCE=0`, remove that override or set it to `1` before the release run. Existing dataset profiles and environment overrides remain effective.
+- Missing Python launcher: install Python 3.12 or create the project environment
+  explicitly before starting hybrid mode.
+- Model assets missing: add the prepared files; installing Python packages alone
+  does not download or validate those exports.
+- Docker cannot reach inference: check the private Docker connection in Windows
+  Firewall. Hybrid inference binds `0.0.0.0`; keep model port 8001 private.
+- Occupied port: stop the other launcher/container. The launcher does not kill
+  unrelated processes or load a duplicate model on an occupied port.
+- Slow answers: inspect initialization logs/status for CPU fallback before
+  changing retrieval parameters.
