@@ -174,6 +174,7 @@ def run_hybrid(launcher, alert):
         if stop.is_set():
             return 1
         show('Hybrid', 'Ready: http://localhost:8000/chat | admin http://localhost:8501')
+        launcher.open_chat_browser()
         model_status = status(model_url) or {}
         fallback = [name for name, info in model_status.get('inference_startup', {}).items()
                     if info.get('path') == 'cpu_fallback']

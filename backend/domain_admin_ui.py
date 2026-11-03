@@ -1,5 +1,7 @@
 """Local Streamlit domain onboarding and configuration, alongside existing monitoring."""
 import hashlib
+import copy
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -27,17 +29,19 @@ def ui_error(exc):
 
 
 @timed('backend.domain_admin_ui.upload_page')
-def upload_page():
+def upload_page(domain=None, *, create_new=False):
     st.subheader('Thêm dữ liệu hoặc tạo lĩnh vực')
     st.caption('Tải tệp → tạo cấu hình → kiểm tra → nhập dữ liệu. '
                'Nhập dữ liệu cho lĩnh vực đã có sẽ thay thế toàn bộ dữ liệu của lĩnh vực đó sau khi hoàn tất.')
     configs = list_domain_configs(include_inactive=True)
     existing = {c.name: c for c in configs}
-    choice = st.selectbox('Lĩnh vực đích', ['Tạo lĩnh vực mới'] + list(existing), key='upload_domain')
+    choice = ('Tạo lĩnh vực mới' if create_new else domain if domain is not None
+              else st.selectbox('Lĩnh vực đích', ['Tạo lĩnh vực mới'] + list(existing), key='upload_domain'))
+    upload_context = 'create' if create_new else 'existing_' + domain if domain else 'standalone'
     new = choice == 'Tạo lĩnh vực mới'
     domain_id = st.text_input('Mã lĩnh vực mới (để trống để Gemini đề xuất)',
                             placeholder='university / it_support / hr', key='new_domain_id') if new else choice
-    file = st.file_uploader('Tệp dữ liệu', type=['xlsx', 'xlsm', 'csv', 'tsv', 'json', 'jsonl'], key='domain_upload')
+    file = st.file_uploader('Tệp dữ liệu', type=['xlsx', 'xlsm', 'csv', 'tsv', 'json', 'jsonl'], key='domain_upload_' + upload_context)
     sheet = 0
     if file and Path(file.name).suffix.lower() in {'.xlsx', '.xlsm'}:
         sheet_text = st.text_input('Trang tính Excel (số thứ tự hoặc tên)', value='0', key='upload_sheet')
@@ -81,18 +85,20 @@ def upload_page():
                 ui_error(exc)
     else:
         st.info('Dùng lại cấu hình hiện tại; không gọi Gemini và không tự đổi ánh xạ cột.')
-    with st.expander('Cấu hình nâng cao: nhập cấu hình JSON', expanded=False):
-        supplied = st.file_uploader('Nhập cấu hình JSON có sẵn', type=['json'], key='import_profile')
-        if supplied and st.button('Nạp cấu hình JSON'):
-            try:
-                st.session_state['profile_editor'] = dump(validate_profile(json.loads(supplied.getvalue().decode('utf-8-sig'))))
-                st.session_state.pop('mapping_editor', None)
-            except Exception as exc:
-                ui_error(exc)
+    with st.expander('Nhập cấu hình có sẵn', expanded=False):
+        st.caption('Tùy chọn cho cấu hình đã chuẩn bị trước; không cần dùng khi cấu hình được đề xuất bằng Gemini.')
+        supplied = st.file_uploader('Tệp cấu hình JSON', type=['json'], key='import_profile_' + upload_context)
+        if supplied:
+            supplied_token = token + hashlib.sha256(supplied.getvalue()).hexdigest()
+            if st.session_state.get('imported_profile_token') != supplied_token:
+                try:
+                    st.session_state['profile_editor'] = dump(validate_profile(json.loads(supplied.getvalue().decode('utf-8-sig'))))
+                    st.session_state['imported_profile_token'] = supplied_token
+                except Exception as exc:
+                    ui_error(exc)
     if 'profile_editor' not in st.session_state:
         return
-    with st.expander('Cấu hình nâng cao: chỉnh sửa JSON', expanded=False):
-        text = st.text_area('Cấu hình đầy đủ (JSON)', height=300, key='profile_editor')
+    text = st.session_state['profile_editor']
     try:
         profile = validate_profile(json.loads(text))
         if not new and profile['domain_name'] != choice:
@@ -105,7 +111,7 @@ def upload_page():
         description_key = 'upload_desc_' + hashlib.sha256(text.encode()).hexdigest()[:12]
         profile['description'] = st.text_area('Mô tả phạm vi dữ liệu', profile.get('description', ''), key=description_key)
         st.caption('Mã lĩnh vực: ' + profile['domain_name'])
-        with st.expander('Cấu hình nâng cao: ánh xạ cột', expanded=False):
+        with st.expander('Ánh xạ cột dữ liệu', expanded=True):
             mapping = pd.DataFrame([{'Mã trường': k, 'Cột dữ liệu': v} for k, v in profile['schema_mapping'].items()])
             mapping_digest = hashlib.sha256(dump(profile['schema_mapping']).encode()).hexdigest()[:10]
             edited = st.data_editor(mapping, hide_index=True, num_rows='dynamic', use_container_width=True,
@@ -125,13 +131,15 @@ def upload_page():
         profile['embedding_fields'] = st.multiselect('Các cột dùng để tìm kiếm', keys,
             default=[k for k in profile.get('embedding_fields', [profile['primary_entity']]) if k in keys],
             format_func=lambda k: profile['schema_mapping'][k],
-            key='embed_' + token[:12] + mapping_digest)
+            key='embed_' + token[:12] + mapping_digest,
+            help='Các cột dùng để tạo chỉ mục tìm kiếm. Thay đổi lựa chọn này cần nhập lại dữ liệu.')
         with st.expander('Cấu hình nâng cao: tìm kiếm và nguồn', expanded=False):
             profile['embedding_prefix'] = st.text_input('Tiền tố văn bản tìm kiếm', value=profile.get('embedding_prefix', ''),
                                                       key='prefix_' + token[:12])
             profile['excluded_fields'] = st.multiselect('Các trường ẩn trong nguồn dữ liệu', keys,
                 default=[k for k in profile.get('excluded_fields', ['timestamp', 'email', 'email_address']) if k in keys],
-                key='excluded_' + token[:12] + mapping_digest)
+                key='excluded_' + token[:12] + mapping_digest,
+                help='Giữ trong dữ liệu gốc nhưng không đưa vào ngữ cảnh trả lời và nguồn hiển thị.')
         validate_profile(profile)
         _, report = prepare_records(df, profile)
         st.success(f"Hợp lệ: {report['indexed_rows']} bản ghi sẵn sàng để nhập.")
@@ -146,91 +154,104 @@ def upload_page():
 
 
 @timed('backend.domain_admin_ui.settings_page')
-def settings_page():
-    st.subheader('Cấu hình theo lĩnh vực')
+def settings_page(domain=None):
+    st.subheader('Cấu hình trả lời')
     configs = {c.name: c for c in list_domain_configs(include_inactive=True)}
     if not configs:
-        st.info('Chưa có lĩnh vực. Nhập dữ liệu ở tab Thêm dữ liệu trước.')
+        st.info('Chưa có lĩnh vực để cấu hình.')
         return
-    name = st.selectbox('Lĩnh vực cần cấu hình', list(configs), key='settings_domain')
+    name = domain or st.selectbox('Lĩnh vực', list(configs), key='settings_domain')
     config = configs[name]
-    st.caption('Thay đổi hướng dẫn trả lời, ngưỡng điểm hoặc số kết quả có hiệu lực ở lượt trò chuyện kế tiếp. '
-               'Thay đổi ánh xạ cột hoặc cột tìm kiếm cần nhập lại dữ liệu ở tab Thêm dữ liệu.')
-    runtime = {k: v for k, v in config.profile.items() if k in RUNTIME_KEYS}
-    if st.session_state.get('settings_identity') != name + config.revision:
-        st.session_state['settings_identity'] = name + config.revision
-        st.session_state['runtime_json'] = dump(runtime)
-    form_key = name + config.revision[:10]
+    mode = st.selectbox('Chế độ cần chỉnh', ['strict', 'friendly'],
+        format_func=lambda value: 'Strict' if value == 'strict' else 'Friendly',
+        key='edit_mode_' + name,
+        help='Chỉ lưu thay đổi cho chế độ đang chọn. Chế độ còn lại được giữ nguyên.')
+    runtime = {key: copy.deepcopy(value) for key, value in config.profile.items() if key in RUNTIME_KEYS}
+    modes = copy.deepcopy(config.profile.get('modes', {}))
     baseline = {}
     prompt_path = ROOT_DIR / 'backend/prompts.json'
     if config.primary_entity == 'procedure_name' and prompt_path.exists():
         baseline = read_json(prompt_path).get('baseline_qa', {})
+    settings = {**baseline, **mode_settings(config, mode)}
+    settings = {key: value for key, value in settings.items() if key in {
+        'system_prompt', 'user_template', 'direct_prompt', 'temperature', 'top_p',
+        'max_tokens', 'minimum_score', 'candidate_k', 'result_k'}}
+    form_key = name + config.revision[:10] + '_' + mode
+    st.caption('Có hiệu lực sau khi lưu. Thay đổi cột hoặc ánh xạ dữ liệu phải thực hiện ở mục Cập nhật dữ liệu.')
     with st.form('settings_' + form_key):
-        description = st.text_area('Mô tả phạm vi dữ liệu (dùng phát hiện lĩnh vực)', config.profile.get('description', ''), key='desc_' + form_key)
-        with st.expander('Cấu hình nâng cao: câu hỏi nhận diện lĩnh vực', expanded=False):
-            examples = st.text_area('Câu hỏi minh họa cho nhận diện lĩnh vực (mỗi dòng một câu)', '\n'.join(config.profile.get('routing_examples', [])), key='examples_' + form_key)
-        defaults = st.selectbox('Chế độ mặc định', ['strict', 'friendly'], format_func=lambda mode: 'Nghiêm ngặt (Strict)' if mode == 'strict' else 'Thân thiện (Friendly)',
-            index=0 if config.profile.get('default_mode', os.getenv('CHAT_MODE', 'strict')) == 'strict' else 1, key='mode_' + form_key)
-        with st.expander('Cấu hình nâng cao: xử lý bằng chứng', expanded=False):
-            fallback = st.text_area('Thông báo khi thiếu bằng chứng (để trống dùng mặc định)', config.profile.get('fallback_message', ''), key='fallback_' + form_key)
-            exact = st.checkbox('Trả nguyên văn các trường được hỏi rõ', value=config.profile.get('exact_field_output', os.getenv('RAG_EXACT_FIELD_OUTPUT', '0') == '1' and config.primary_entity == 'procedure_name'), key='exact_' + form_key)
-            st.caption('Khi trả nguyên văn trường dữ liệu, hướng dẫn trả lời và độ ngẫu nhiên không thay đổi các giá trị đó. '
-                       'Tham số mô hình áp dụng cho câu trả lời được mô hình tạo.')
-        modes = {}
-        columns = st.columns(2)
-        for col, mode in zip(columns, ['strict', 'friendly']):
-            with col:
-                st.markdown('**' + ('Nghiêm ngặt (Strict)' if mode == 'strict' else 'Thân thiện (Friendly)') + '**')
-                settings = {**baseline, **mode_settings(config, mode)}
-                settings = {k: v for k, v in settings.items() if k in {'system_prompt', 'user_template', 'direct_prompt', 'temperature', 'top_p', 'max_tokens', 'minimum_score', 'candidate_k', 'result_k'}}
-                settings['system_prompt'] = st.text_area('Hướng dẫn trả lời từ dữ liệu', settings.get('system_prompt', GENERIC_EVIDENCE_PROMPT), height=180, key=mode + '_prompt_' + form_key)
-                if mode == 'friendly':
-                    settings['direct_prompt'] = st.text_area('Hướng dẫn trò chuyện không tra cứu', settings.get('direct_prompt', 'Bạn là trợ lý thân thiện. Trả lời ngắn gọn. Không tuyên bố đã tra cứu nguồn khi chưa tra cứu.'), key='direct_' + form_key)
-                with st.expander('Cấu hình nâng cao: tham số và mẫu câu hỏi', expanded=False):
-                    settings['user_template'] = st.text_area('Mẫu câu hỏi: {context} và {query}', settings.get('user_template', 'RECORDS:\n{context}\nQUESTION:\n{query}'), key=mode + '_template_' + form_key)
-                    settings['temperature'] = st.number_input('Độ ngẫu nhiên (temperature)', 0.0, 2.0, float(settings.get('temperature', 0.1 if mode == 'strict' else 0.3)), step=0.05, key=mode + '_temp_' + form_key)
-                    settings['top_p'] = st.number_input('Phạm vi lấy mẫu (top-p)', 0.01, 1.0, float(settings.get('top_p', 0.95)), step=0.01, key=mode + '_top_' + form_key)
-                    settings['max_tokens'] = st.number_input('Giới hạn token trả lời', 1, 4096, int(settings.get('max_tokens', 800)), key=mode + '_tokens_' + form_key)
-                    settings['minimum_score'] = st.number_input('Ngưỡng điểm tra cứu', 0.0, 1.0, float(settings.get('minimum_score', config.minimum_score)), step=0.01, format='%.4f', key=mode + '_score_' + form_key)
-                    settings['candidate_k'] = st.number_input('Số bản ghi ứng viên', 1, 200, int(settings.get('candidate_k', config.retrieval_option('candidate_k', 'RAG_CANDIDATE_K', '20'))), key=mode + '_candidate_' + form_key)
-                    settings['result_k'] = st.number_input('Số bản ghi kết quả', 1, 200, int(settings.get('result_k', config.retrieval_option('result_k', 'RAG_RESULT_K', '5'))), key=mode + '_result_' + form_key)
-                modes[mode] = settings
-        if st.form_submit_button('Áp dụng cấu hình', type='primary'):
+        description = st.text_area('Mô tả phạm vi dữ liệu', config.profile.get('description', ''),
+            key='desc_' + form_key, help='Dùng để nhận diện lĩnh vực; không thay thế nội dung các bản ghi.')
+        settings['system_prompt'] = st.text_area('Hướng dẫn trả lời từ dữ liệu',
+            settings.get('system_prompt', GENERIC_EVIDENCE_PROMPT), height=150, key='prompt_' + form_key)
+        if mode == 'friendly':
+            settings['direct_prompt'] = st.text_area('Hướng dẫn trò chuyện thông thường',
+                settings.get('direct_prompt', 'Bạn là trợ lý thân thiện. Trả lời ngắn gọn. Không tuyên bố đã tra cứu nguồn khi chưa tra cứu.'),
+                key='direct_' + form_key, help='Áp dụng cho phần trò chuyện không dùng dữ liệu tra cứu.')
+        defaults = st.selectbox('Chế độ mặc định', ['strict', 'friendly'],
+            index=0 if config.profile.get('default_mode', os.getenv('CHAT_MODE', 'strict')) == 'strict' else 1,
+            key='default_' + form_key, help='Dùng khi lượt hỏi không chỉ định chế độ.')
+        with st.expander('Tham số trả lời và tra cứu', expanded=False):
+            st.caption('Các giá trị được nạp từ cấu hình hiện tại; mở biểu mẫu không thay đổi cấu hình.')
+            settings['temperature'] = st.number_input('Temperature', 0.0, 2.0,
+                float(settings.get('temperature', 0.1 if mode == 'strict' else 0.3)), step=0.05,
+                key='temp_' + form_key, help='Mức ngẫu nhiên khi sinh câu trả lời. Giá trị thấp làm đầu ra ổn định hơn, không bảo đảm tính chính xác.')
+            settings['top_p'] = st.number_input('Top-p', 0.01, 1.0,
+                float(settings.get('top_p', 0.95)), step=0.01, key='top_' + form_key,
+                help='Giới hạn tập token được lấy mẫu khi sinh câu trả lời.')
+            settings['max_tokens'] = st.number_input('Giới hạn token trả lời', 1, 4096,
+                int(settings.get('max_tokens', 800)), key='tokens_' + form_key,
+                help='Giới hạn độ dài đầu ra; quá thấp có thể làm câu trả lời bị cắt.')
+            settings['minimum_score'] = st.number_input('Ngưỡng điểm tra cứu', 0.0, 1.0,
+                float(settings.get('minimum_score', config.minimum_score)), step=0.01, format='%.4f',
+                key='score_' + form_key, help='Ngưỡng loại ứng viên có điểm thấp. Tăng ngưỡng có thể loại cả bản ghi phù hợp.')
+            settings['candidate_k'] = st.number_input('Số bản ghi ứng viên', 1, 200,
+                int(settings.get('candidate_k', config.retrieval_option('candidate_k', 'RAG_CANDIDATE_K', '20'))),
+                key='candidate_' + form_key, help='Số ứng viên phục vụ tìm kiếm và xếp hạng. Tăng giá trị có thể tăng thời gian xử lý.')
+            settings['result_k'] = st.number_input('Số bản ghi kết quả', 1, 200,
+                int(settings.get('result_k', config.retrieval_option('result_k', 'RAG_RESULT_K', '5'))),
+                key='result_' + form_key, help='Giới hạn bản ghi giữ lại cho bước trả lời; không được vượt số ứng viên.')
+            settings['user_template'] = st.text_area('Mẫu câu hỏi gửi mô hình',
+                settings.get('user_template', 'RECORDS:\n{context}\nQUESTION:\n{query}'),
+                key='template_' + form_key, help='Giữ các biến {context} và {query} để truyền dữ liệu và câu hỏi.')
+        with st.expander('Nhận diện lĩnh vực và xử lý thiếu dữ liệu', expanded=False):
+            examples = st.text_area('Câu hỏi minh họa cho lĩnh vực',
+                '\n'.join(config.profile.get('routing_examples', [])), key='examples_' + form_key,
+                help='Mỗi dòng một câu, dùng làm ví dụ cho bộ nhận diện lĩnh vực.')
+            fallback = st.text_area('Thông báo khi thiếu dữ liệu',
+                config.profile.get('fallback_message', ''), key='fallback_' + form_key)
+            exact = st.checkbox('Trả trực tiếp giá trị trường khi phù hợp',
+                value=config.profile.get('exact_field_output', os.getenv('RAG_EXACT_FIELD_OUTPUT', '0') == '1' and config.primary_entity == 'procedure_name'),
+                key='exact_' + form_key,
+                help='Chỉ áp dụng khi câu hỏi và dữ liệu đáp ứng điều kiện trả nguyên văn. Câu hỏi khác vẫn dùng mô hình.')
+        if st.form_submit_button('Lưu cấu hình', type='primary'):
             try:
-                runtime.update(description=description, routing_examples=[x.strip() for x in examples.splitlines() if x.strip()],
-                               default_mode=defaults, exact_field_output=exact, modes=modes)
+                modes[mode] = settings
+                runtime.update(description=description,
+                    routing_examples=[line.strip() for line in examples.splitlines() if line.strip()],
+                    default_mode=defaults, exact_field_output=exact, modes=modes)
                 if fallback:
                     runtime['fallback_message'] = fallback
                 else:
                     runtime.pop('fallback_message', None)
                 publish_settings(name, runtime)
-                st.success('Đã áp dụng. Không cần khởi động lại máy chủ hoặc nhập lại dữ liệu.')
+                st.success('Đã lưu cấu hình.')
                 st.rerun()
             except Exception as exc:
                 ui_error(exc)
-    with st.expander('Cấu hình nâng cao: JSON và khôi phục mặc định'):
-        raw = st.text_area('Cấu hình hoạt động (JSON)', key='runtime_json', height=350)
-        if st.button('Áp dụng JSON nâng cao'):
-            try:
-                publish_settings(name, json.loads(raw))
-                st.success('Đã áp dụng cấu hình nâng cao.')
-                st.rerun()
-            except Exception as exc:
-                ui_error(exc)
-        if st.button('Khôi phục cấu hình của phiên bản dữ liệu'):
-            path = ROOT_DIR / 'data/domain_settings' / f'{name}.json'
-            path.unlink(missing_ok=True)
+    with st.expander('Khôi phục cài đặt', expanded=False):
+        confirmed = st.checkbox('Xác nhận bỏ các thay đổi cài đặt và dùng lại cấu hình của phiên bản dữ liệu',
+                                key='reset_confirm_' + name)
+        if st.button('Khôi phục cài đặt mặc định', disabled=not confirmed):
+            (ROOT_DIR / 'data/domain_settings' / f'{name}.json').unlink(missing_ok=True)
             st.rerun()
 
 
 @timed('backend.domain_admin_ui.status_page')
-def status_page():
+def status_page(domain=None):
     st.subheader('Tiến độ nhập dữ liệu')
-    if st.button('Làm mới trạng thái'):
-        st.rerun()
     status_labels = {'queued': 'Đang chờ', 'running': 'Đang xử lý', 'failed': 'Thất bại', 'completed': 'Hoàn tất', 'succeeded': 'Hoàn tất'}
     stage_labels = {'Waiting for ingestion slot': 'Chờ tác vụ nhập dữ liệu trước hoàn tất', 'Waiting for worker': 'Chờ tiến trình xử lý', 'Worker stopped before completion': 'Tiến trình dừng trước khi hoàn tất', 'Could not start worker': 'Không thể khởi chạy tiến trình', 'Reading and validating uploaded file': 'Đọc và xác thực tệp', 'Writing SQL snapshot': 'Lưu phiên bản dữ liệu', 'Building and verifying vector index': 'Tạo và kiểm tra chỉ mục tìm kiếm', 'Activating completed snapshot': 'Kích hoạt phiên bản dữ liệu', 'Domain is ready for chat': 'Sẵn sàng sử dụng', 'Ingestion failed': 'Nhập dữ liệu thất bại'}
-    jobs = list_jobs()
+    jobs = [job for job in list_jobs() if domain is None or job['domain'] == domain]
     if not jobs:
         st.info('Chưa có tác vụ nhập dữ liệu.')
     for job in jobs[:20]:
@@ -248,18 +269,16 @@ def status_page():
     configs = list_domain_configs(include_inactive=True)
     if not configs:
         return
-    st.dataframe(pd.DataFrame([{'Lĩnh vực': c.name, 'Phiên bản': c.generation,
-                              'Sẵn sàng': c.db_path.is_file() and c.vector_dir.is_dir(),
-                              'Trạng thái': 'Đang bật' if domain_status(c.name) == 'enabled' else 'Đã tắt',
-                              'Ngưỡng': c.minimum_score} for c in configs]), hide_index=True, use_container_width=True)
-    name = st.selectbox('Lĩnh vực cần xem phiên bản', [c.name for c in configs], key='rollback_domain')
+    name = domain or st.selectbox('Lĩnh vực', [c.name for c in configs], key='rollback_domain')
     snapshots = generations(name)
     if not snapshots:
         st.caption('Lĩnh vực này dùng dữ liệu cũ; phiên bản sẽ được tạo sau lần nhập dữ liệu tiếp theo.')
         return
     generation = st.selectbox('Phiên bản', [g['generation'] for g in snapshots],
-                             format_func=lambda x: x + (' (đang dùng)' if next(g for g in snapshots if g['generation'] == x)['active'] else ''))
-    if st.button('Kích hoạt phiên bản đã chọn'):
+        format_func=lambda value: datetime.fromtimestamp(next(g for g in snapshots if g['generation'] == value)['modified']).strftime('%d/%m/%Y %H:%M') + ' · ' + value[:8] + (' (đang dùng)' if next(g for g in snapshots if g['generation'] == value)['active'] else ''),
+        key='version_' + name)
+    active = next(g for g in snapshots if g['generation'] == generation)['active']
+    if st.button('Dùng phiên bản này', disabled=active):
         try:
             activate_generation(name, generation)
             st.success('Đã kích hoạt phiên bản dữ liệu đã chọn.')
@@ -269,13 +288,13 @@ def status_page():
 
 
 @timed('backend.domain_admin_ui.management_page')
-def management_page():
+def management_page(domain=None):
     st.subheader('Bật, tắt hoặc xóa lĩnh vực')
     configs = {c.name: c for c in list_domain_configs(include_inactive=True)}
     if not configs:
         st.info('Chưa có lĩnh vực để quản lý.')
         return
-    name = st.selectbox('Lĩnh vực cần quản lý', list(configs), key='manage_domain')
+    name = domain or st.selectbox('Lĩnh vực', list(configs), key='manage_domain')
     enabled = domain_status(name) == 'enabled'
     st.write('Trạng thái: ' + ('Đang bật' if enabled else 'Đã tắt'))
     st.caption('Tắt lĩnh vực giữ nguyên dữ liệu và cấu hình, nhưng bỏ lĩnh vực khỏi danh sách trò chuyện '
@@ -319,16 +338,27 @@ def management_page():
 
 @timed('backend.domain_admin_ui.render_domain_admin')
 def render_domain_admin():
-    st.header('Quản lý lĩnh vực và dữ liệu')
+    st.header('Dữ liệu và lĩnh vực')
     notice = st.session_state.pop('domain_management_notice', None)
     if notice:
         st.success(notice)
-    upload, settings, status, management = st.tabs(['Thêm dữ liệu', 'Cấu hình', 'Tiến độ và phiên bản', 'Quản lý lĩnh vực'])
-    with upload:
-        upload_page()
-    with settings:
-        settings_page()
-    with status:
-        status_page()
-    with management:
-        management_page()
+    configs = {config.name: config for config in list_domain_configs(include_inactive=True)}
+    names = list(configs) + ['Tạo lĩnh vực mới']
+    selected = st.selectbox('Lĩnh vực', names, key='admin_domain')
+    if selected == 'Tạo lĩnh vực mới':
+        upload_page(create_new=True)
+        return
+    config = configs[selected]
+    enabled = domain_status(selected) == 'enabled'
+    ready = config.db_path.is_file() and config.vector_dir.is_dir()
+    st.caption(('Đang bật' if enabled else 'Đã tắt') + ' · ' + ('Dữ liệu sẵn sàng' if ready else 'Chưa có dữ liệu sẵn sàng'))
+    action = st.radio('Thao tác', ['Cập nhật dữ liệu', 'Cấu hình trả lời', 'Phiên bản', 'Quản lý'],
+                      horizontal=True, key='domain_action')
+    if action == 'Cập nhật dữ liệu':
+        upload_page(selected)
+    elif action == 'Cấu hình trả lời':
+        settings_page(selected)
+    elif action == 'Phiên bản':
+        status_page(selected)
+    else:
+        management_page(selected)

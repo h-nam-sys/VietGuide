@@ -58,6 +58,7 @@ def execute(tmp_path, monkeypatch, *, reuse_model=False, existing=None, probe_er
             pass
         return 0
     launcher = NS(ROOT=tmp_path, STOP=stop, show=lambda *args: events.append(args),
+        open_chat_browser=lambda: events.append(('Browser','opened')),
         runtime_manifest=lambda: {'packages':{}}, run_group=supervise,
         service_definitions=lambda production: [('LLM',tmp_path,['python','model.py'],8001,'/v1/rag/status'),
                                               ('Backend',tmp_path,['python','backend.py'],8000,'/health')])
@@ -76,6 +77,7 @@ def test_owned_model_and_container_start_and_stop_once(tmp_path, monkeypatch):
     result, starts, docker, events = execute(tmp_path, monkeypatch)
     assert result == 0
     assert len(starts) == 1
+    assert events.count(('Browser','opened')) == 1
     assert [item[0] for item in starts[0]['definitions']] == ['LLM']
     assert starts[0]['environment_overrides'] == {'LLM_BIND_HOST':'0.0.0.0'}
     assert any(args == ['stop','--time','45','new-app'] for args, _ in docker.calls)

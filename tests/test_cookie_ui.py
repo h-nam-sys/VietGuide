@@ -54,7 +54,7 @@ def test_admin_gate_before_data_and_password_removal(tmp_path, monkeypatch):
     app.button[0].click().run()
     assert not app.exception and len(app.success) == 1
     assert not app.text_input
-    app.sidebar.button[0].click().run()
+    next(button for button in app.button if button.label == 'Đóng phiên quản trị').click().run()
     assert not app.exception and not app.success
     assert len(app.text_input) == 1
     assert app.text_input[0].value == ''

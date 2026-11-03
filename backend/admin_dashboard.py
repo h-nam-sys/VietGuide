@@ -39,9 +39,18 @@ if not valid_admin_password(st.session_state.get('_admin_authenticated', '')):
         else:
             st.error('Mật khẩu không đúng.')
     st.stop()
-if st.sidebar.button('Đóng phiên quản trị'):
+heading, refresh, logout = st.columns([6, 1, 1])
+heading.title('Bảng quản trị')
+if refresh.button('Làm mới', key='admin_refresh'):
+    st.cache_data.clear()
+    st.rerun()
+if logout.button('Đóng phiên quản trị'):
     st.session_state.pop('_admin_authenticated', None)
     st.rerun()
+section = st.radio('Khu vực',
+    ['Tổng quan', 'Dữ liệu và lĩnh vực', 'Hội thoại và đánh giá', 'Tìm kiếm trực tuyến'],
+    horizontal=True, key='admin_section', label_visibility='collapsed')
+st.divider()
 
 
 # --- DATA FETCHING ---
@@ -73,19 +82,39 @@ def load_feedback_data():
                 pass
     return pd.DataFrame(data)
 
-# --- UI LAYOUT ---
-st.title("Bảng quản trị")
-st.markdown("Quản lý dữ liệu, cấu hình lĩnh vực và theo dõi hoạt động của trợ lý.")
+def display_value(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return 'Chưa có thông tin.'
+    return json.dumps(value, ensure_ascii=False, indent=2) if isinstance(value, (list, dict)) else str(value)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Tổng quan", "Nhật ký hoạt động", "Đánh giá", "Truy vấn cần xem lại", "Lĩnh vực và dữ liệu", "Tìm kiếm trực tuyến"])
 
-# ==========================================
-# TAB 1: OVERVIEW & STATS
-# ==========================================
-with tab1:
+def record_table(frame, columns, labels, *, question, answer, source=None, key):
+    """Show one compact list with the selected answer and source below it."""
+    columns = [name for name in columns if name in frame.columns]
+    st.caption(f'{len(frame)} lượt. Chọn một dòng để xem câu trả lời và nguồn đầy đủ.')
+    event = st.dataframe(frame[columns], column_config={name: labels.get(name, name) for name in columns},
+        hide_index=True, use_container_width=True, height=320, key=key + '_table',
+        on_select='rerun', selection_mode='single-row')
+    rows = event.selection.rows
+    selected = rows[0] if rows and 0 <= rows[0] < len(frame) else 0
+    row = frame.iloc[selected]
+    metadata = [labels.get(name, name) + ': ' + display_value(row[name])
+                for name in ('created_at', 'timestamp', 'conversation_id', 'rag_score', 'failure_type')
+                if name in frame.columns]
+    if metadata:
+        st.caption(' · '.join(metadata))
+    st.markdown('**Câu hỏi**')
+    st.write(display_value(row.get(question)))
+    st.markdown('**Câu trả lời**')
+    st.markdown(display_value(row.get(answer)))
+    if source and source in frame.columns:
+        with st.expander('Nguồn và dữ liệu cung cấp', expanded=False):
+            st.code(display_value(row.get(source)), language=None)
+
+
+def overview_page():
     st.subheader("Chỉ số hệ thống")
 
-    # KPIs
     conv_df = load_db_data("SELECT id, created_at FROM conversations")
     msg_df = load_db_data("SELECT id, role, created_at FROM messages")
     audit_df = load_db_data("SELECT id, used_online_search FROM audit_logs")
@@ -102,8 +131,6 @@ with tab1:
 
     st.divider()
     st.subheader('Vận hành dịch vụ')
-    if st.button('Làm mới vận hành'):
-        st.rerun()
     try:
         response = requests.get(f'{API_URL}/admin/operations', headers={'X-Admin-Key': admin_password()}, timeout=12)
         response.raise_for_status()
@@ -121,21 +148,17 @@ with tab1:
     except Exception:
         st.warning('Chưa lấy được trạng thái backend. Kiểm tra dịch vụ và ADMIN_PASSWORD.')
 
-    # Chart: Messages over time
     if not msg_df.empty:
         st.subheader("Lưu lượng truy cập theo ngày")
         msg_df['created_at'] = pd.to_datetime(msg_df['created_at'])
         daily_counts = msg_df.groupby(msg_df['created_at'].dt.date).size()
         st.bar_chart(daily_counts)
 
-# ==========================================
-# TAB 2: AUDIT LOGS (MONITORING)
-# ==========================================
-with tab2:
+
+def activity_page():
     st.subheader("Nhật ký tra cứu và trả lời")
     st.markdown("Xem câu trả lời và dữ liệu được sử dụng.")
 
-    # UPDATED QUERY TO INCLUDE NEW COLUMNS IF THEY EXIST
     try:
         logs = load_db_data("SELECT created_at, conversation_id, user_query, llm_final_response, used_online_search, retrieved_local_context, rag_score, failure_type FROM audit_logs ORDER BY created_at DESC LIMIT 100")
     except:
@@ -143,7 +166,6 @@ with tab2:
 
 
     if not logs.empty:
-        # Style the dataframe
         logs['used_online_search'] = logs['used_online_search'].apply(lambda x: "Nguồn ngoài" if x == 1 else "Dữ liệu nội bộ")
 
         column_cfg = {
@@ -160,30 +182,23 @@ with tab2:
         if 'failure_type' in logs.columns:
              column_cfg["failure_type"] = "Trạng thái"
 
-        st.dataframe(
-            logs,
-            column_config=column_cfg,
-            hide_index=True,
-            use_container_width=True,
-            height=500
-        )
+        record_table(logs, ['created_at', 'user_query', 'used_online_search', 'rag_score', 'failure_type'],
+            column_cfg, question='user_query', answer='llm_final_response',
+            source='retrieved_local_context', key='activity')
+
     else:
         st.info("Chưa có nhật ký hoạt động.")
 
-# ==========================================
-# TAB 3: FEEDBACK (RLHF / FINE-TUNING)
-# ==========================================
-with tab3:
+
+def feedback_page():
     st.subheader("Đánh giá từ người dùng")
     st.markdown("Xem phản hồi của người dùng về chất lượng câu trả lời.")
 
     feedback_df = load_feedback_data()
 
     if not feedback_df.empty:
-        # Convert 1/0 to emoji
         feedback_df['rating_display'] = feedback_df['rating'].apply(lambda x: "Phù hợp" if x == 1 else "Không phù hợp")
 
-        # Stats
         good_count = len(feedback_df[feedback_df['rating'] == 1])
         bad_count = len(feedback_df[feedback_df['rating'] == 0])
 
@@ -191,30 +206,19 @@ with tab3:
         col1.metric("Lượt đánh giá phù hợp", good_count)
         col2.metric("Lượt đánh giá không phù hợp", bad_count)
 
-        st.dataframe(
-            feedback_df[['timestamp', 'rating_display', 'input', 'output', 'rag_context']],
-            column_config={
-                "timestamp": "Thời gian",
-                "rating_display": "Đánh giá",
-                "input": "Câu hỏi",
-                "output": "Câu trả lời",
-                "rag_context": "Dữ liệu cung cấp"
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+        record_table(feedback_df, ['timestamp', 'rating_display', 'input'],
+            {'timestamp':'Thời gian', 'rating_display':'Đánh giá', 'input':'Câu hỏi',
+             'output':'Câu trả lời', 'rag_context':'Dữ liệu cung cấp'},
+            question='input', answer='output', source='rag_context', key='feedback')
+
     else:
         st.info("Chưa có đánh giá nào từ người dùng.")
 
-# ==========================================
-# TAB 4: FAILED QUERIES (NEW)
-# ==========================================
-with tab4:
+
+def review_page():
     st.subheader("Truy vấn cần xem lại")
     st.markdown("Các câu hỏi có điểm tra cứu thấp hoặc được ghi nhận cần xử lý thêm. Dùng danh sách này để xem lại và bổ sung dữ liệu.")
 
-    if st.button("Làm mới dữ liệu"):
-        st.cache_data.clear()
 
     try:
         response = requests.get(f"{API_URL}/admin/failed-logs", headers={"X-Admin-Key": admin_password()}, timeout=10)
@@ -223,32 +227,35 @@ with tab4:
             if failed_logs:
                 df_failed = pd.DataFrame(failed_logs)
 
-                st.dataframe(
-                    df_failed[["created_at", "failure_type", "rag_score", "user_query", "llm_response"]],
-                    column_config={
-                        "created_at": "Thời gian",
-                        "failure_type": "Loại lỗi",
-                        "rag_score": "Điểm RAG",
-                        "user_query": "Câu hỏi",
-                        "llm_response": "Câu trả lời"
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    height=500
-                )
+                record_table(df_failed, ['created_at', 'failure_type', 'rag_score', 'user_query'],
+                    {'created_at':'Thời gian', 'failure_type':'Loại lỗi', 'rag_score':'Điểm RAG',
+                     'user_query':'Câu hỏi', 'llm_response':'Câu trả lời'},
+                    question='user_query', answer='llm_response', key='review')
+
             else:
                 st.success("Chưa có truy vấn cần xem lại.")
         else:
             st.error(f"Lỗi API: {response.status_code}. Kiểm tra máy chủ backend đã chạy chưa.")
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.RequestException:
         st.error("Không thể kết nối đến máy chủ backend tại localhost:8000.")
 
 
-with tab5:
+if section == 'Tổng quan':
+    st.caption('Tình trạng dịch vụ và hoạt động của trợ lý.')
+    overview_page()
+elif section == 'Dữ liệu và lĩnh vực':
     from domain_admin_ui import render_domain_admin
     render_domain_admin()
-
-
-with tab6:
+elif section == 'Hội thoại và đánh giá':
+    st.subheader('Hội thoại và đánh giá')
+    view = st.radio('Nội dung', ['Nhật ký', 'Đánh giá', 'Cần xem lại'],
+                    horizontal=True, key='admin_conversation_view')
+    if view == 'Nhật ký':
+        activity_page()
+    elif view == 'Đánh giá':
+        feedback_page()
+    else:
+        review_page()
+else:
     from mcp_admin_ui import render_mcp_admin
     render_mcp_admin()

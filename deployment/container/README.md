@@ -45,6 +45,9 @@ with an explanation. An existing old all-in-one app container is stopped before
 native inference starts; its saved volumes are reused.
 
 Chat: http://localhost:8000/chat. Admin: http://localhost:8501.
+The host launcher opens chat in the default browser once readiness passes,
+in native and hybrid modes. Service restarts do not open additional tabs.
+Set `OPEN_CHAT_BROWSER=0` in `.env` to disable automatic opening.
 Keep the launcher terminal open. Ctrl+C stops the native inference and container
 that this invocation started. Independently running components that were reused
 are left running. Docker Desktop itself is left running.

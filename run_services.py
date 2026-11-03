@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import urllib.request
+import webbrowser
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from rag.service_config import llm_port
@@ -118,6 +119,29 @@ def healthy(port, path='/health'):
         return False
 
 
+def open_chat_browser():
+    if os.getenv('OPEN_CHAT_BROWSER', '1').strip().lower() in {'0', 'false', 'no'}:
+        return
+    # Headless Linux containers/servers should not try to launch desktop programs.
+    if os.name != 'nt' and sys.platform != 'darwin' and not (
+            os.getenv('DISPLAY') or os.getenv('WAYLAND_DISPLAY')):
+        return
+    try:
+        if webbrowser.open('http://localhost:8000/chat', new=2):
+            show('Browser', 'Opened chat.')
+        else:
+            show('Browser', 'Open chat manually: http://localhost:8000/chat')
+    except Exception:
+        show('Browser', 'Open chat manually: http://localhost:8000/chat')
+
+
+def open_chat_when_ready():
+    while not STOP.wait(1):
+        if healthy(8000, '/readyz') and not STOP.is_set():
+            open_chat_browser()
+            return
+
+
 def runtime_manifest():
     return {'python': sys.version, 'platform': platform.platform(), 'packages':
             {d.metadata['Name']: d.version for d in importlib.metadata.distributions() if d.metadata['Name']}}
@@ -164,7 +188,7 @@ def main(argv=None):
                 return run_hybrid(sys.modules[__name__], alert)
             if args.web_only:
                 return run_group(production, alert, definitions=service_definitions(production, web_only=True))
-            return run_group(production, alert)
+            return run_group(production, alert, open_browser=True)
     except TimeoutError:
         show('Services', 'ERROR: another launcher or maintenance operation is active.')
         return 1
@@ -173,7 +197,7 @@ def main(argv=None):
         return 1
 
 
-def run_group(production, alert, *, definitions=None, environment_overrides=None):
+def run_group(production, alert, *, definitions=None, environment_overrides=None, open_browser=False):
     services = service_definitions(production) if definitions is None else definitions
     for name, _, _, port, _ in services:
         with socket.socket() as probe:
@@ -218,6 +242,8 @@ def run_group(production, alert, *, definitions=None, environment_overrides=None
     try:
         for definition in services:
             launch(definition)
+        if open_browser and any(item[0] == 'Backend' for item in services):
+            threading.Thread(target=open_chat_when_ready, name='chat-browser', daemon=True).start()
         while not STOP.wait(.5):
             now = time.monotonic()
             probe_now = production and now-last_probe >= 10
