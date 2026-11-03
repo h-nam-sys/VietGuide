@@ -41,8 +41,8 @@ and extract it, or clone the repository with GitHub Desktop.
 
 | Download | Save / extract to |
 |---|---|
-| [Qwen3.5-4B IQ4_XS]([https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-IQ4_XS.gguf?download=true](https://drive.google.com/drive/folders/1wb32vjVgWBhrZrHVsqmYwNEZMb_ROeOm?usp=sharing)) | `models/qwen3.5_4b.gguf` |
-| [BGE-M3]([https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-IQ4_XS.gguf?download=true](https://drive.google.com/drive/folders/1wb32vjVgWBhrZrHVsqmYwNEZMb_ROeOm?usp=sharing)) | `models/rag_directml/` |
+| [Qwen3.5-4B IQ4_XS](https://drive.google.com/drive/folders/1wb32vjVgWBhrZrHVsqmYwNEZMb_ROeOm?usp=sharing) | `models/qwen3.5_4b.gguf` |
+| [BGE-M3](https://drive.google.com/drive/folders/1wb32vjVgWBhrZrHVsqmYwNEZMb_ROeOm?usp=sharing) | `models/rag_directml/` |
 
 The prepared bundle supplies `models/rag_directml/`, `data/` and optional
 `backend/static/forms/`. It is required for this ready-to-run setup. To prepare
