@@ -116,11 +116,14 @@ def run_hybrid(launcher, alert):
         manifest.write_text(json.dumps(launcher.runtime_manifest(), indent=2), encoding='utf-8')
         from deployment.container.configure import prepare
         prepare(launcher.ROOT)
-        base = docker.call(['image','inspect','--format','{{.Id}}','legal-llm:docker-v1'], compose=False, check=False)
+        image = 'namnhedu/legal_llm-chat-service:hybrid-v1'
+        base = docker.call(['image','inspect','--format','{{.Id}}',image], compose=False, check=False)
         if base.returncode:
-            show('Docker', 'First setup: building the base image. This downloads dependencies and compiles inference support once.')
-            docker.call(['compose','-f','compose.yaml','build','app'], compose=False,
-                        capture=False, timeout=3600)
+            show('Docker', 'Downloading the application runtime from Docker Hub (first launch only).')
+            try:
+                docker.call(['pull', image], compose=False, capture=False, timeout=3600)
+            except RuntimeError as exc:
+                raise RuntimeError('Cannot download ' + image + '. Check internet access and that the maintainer published the hybrid image. Private repositories require docker login.') from exc
         show('Docker', 'Building the web update on the existing image; no inference compilation.')
         docker.call(['build', 'app'], capture=False, timeout=600)
         if stop.is_set():

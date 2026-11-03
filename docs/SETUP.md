@@ -19,6 +19,14 @@ They are not included in the smaller hybrid runtime requirements.
 
 ## Hybrid installation
 
+See the [README quick start](../README.md#quick-start) for download locations,
+the inline `.env` example, and Docker versus source launch commands.
+The launcher pulls `namnhedu/legal_llm-chat-service:hybrid-v1` from Docker Hub
+when missing. The maintainer must publish that tag first; users do not need
+to build the dependency image or import a TAR file. The prepared
+retrieval/data archive is still required for the ready-to-run path.
+
+
 Install Python 3.12 with the Windows Python launcher and Docker Desktop using
 Linux containers. Place the runtime assets in the project, create `.env` from
 `.env.example`, and set the admin password. Then run:
@@ -38,7 +46,7 @@ and compatibility dependencies. FlagEmbedding is retained for the existing
 reranker tokenizer compatibility path; its dependencies include PyTorch. Streamlit,
 LlamaIndex and backend database packages are supplied by the Docker image instead.
 
-The launcher prepares/builds the base image if missing, applies the web source
+The launcher downloads the base image if missing, applies the web source
 layer, starts native inference and checks it from a temporary container before
 starting backend/admin. No separate inference command is required.
 

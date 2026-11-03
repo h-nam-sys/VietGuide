@@ -1,5 +1,6 @@
 # Reuse the already-built runtime; this update does not compile inference again.
-FROM legal-llm:docker-v1
+ARG HYBRID_BASE_IMAGE=namnhedu/legal_llm-chat-service:hybrid-v1
+FROM ${HYBRID_BASE_IMAGE}
 WORKDIR /app
 COPY backend ./backend
 COPY rag ./rag
